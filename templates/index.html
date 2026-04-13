@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DCT Event Risk Agent</title>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
+      background: #eef1f6;
+      color: #1a2744;
+      min-height: 100vh;
+      font-size: 14px;
+    }
+
+    /* ── Header ───────────────────────────────────────────────── */
+    .site-header {
+      background: linear-gradient(135deg, #001e47 0%, #003268 55%, #00438a 100%);
+      color: #fff;
+      box-shadow: 0 3px 12px rgba(0,0,0,.35);
+      position: sticky;
+      top: 0;
+      z-index: 200;
+    }
+    .header-inner {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .header-logo {
+      width: 52px;
+      height: 52px;
+      background: linear-gradient(135deg, #c4a44b, #e8cc6a);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 800;
+      color: #001e47;
+      letter-spacing: -0.5px;
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(0,0,0,.3);
+    }
+    .header-titles h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      line-height: 1.2;
+    }
+    .header-titles p {
+      font-size: 12px;
+      color: rgba(255,255,255,.65);
+      margin-top: 2px;
+      letter-spacing: 0.2px;
+    }
+    .header-pill {
+      margin-left: auto;
+      background: rgba(255,255,255,.1);
+      border: 1px solid rgba(255,255,255,.22);
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-size: 11px;
+      color: rgba(255,255,255,.8);
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    /* ── Layout ───────────────────────────────────────────────── */
+    .page-wrap {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 28px 28px 48px;
+    }
+
+    /* ── Card ─────────────────────────────────────────────────── */
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07), 0 4px 18px rgba(0,0,0,.06);
+      overflow: hidden;
+    }
+    .card + .card { margin-top: 20px; }
+
+    .card-head {
+      padding: 15px 22px;
+      border-bottom: 2px solid #e4eaf4;
+      background: linear-gradient(90deg, #f6f8fc, #fff);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .card-head .ico {
+      width: 30px; height: 30px;
+      background: #003268;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .card-head h2 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #1a2744;
+    }
+    .card-body { padding: 24px 22px; }
+
+    /* ── Form ─────────────────────────────────────────────────── */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    .form-group.span2 { grid-column: 1 / -1; }
+
+    label {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #3d5580;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    input[type="text"],
+    input[type="date"],
+    input[type="number"],
+    select {
+      padding: 9px 13px;
+      border: 1.5px solid #c8d4e8;
+      border-radius: 6px;
+      font-size: 14px;
+      color: #1a2744;
+      background: #fff;
+      transition: border-color .18s, box-shadow .18s;
+      width: 100%;
+      font-family: inherit;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: #003268;
+      box-shadow: 0 0 0 3px rgba(0,50,104,.12);
+    }
+    select {
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23003268' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 11px center;
+      padding-right: 34px;
+    }
+
+    .form-footer {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-top: 22px;
+      padding-top: 18px;
+      border-top: 1px solid #e4eaf4;
+      flex-wrap: wrap;
+    }
+    .hint { font-size: 12px; color: #8499ba; }
+
+    /* ── Buttons ──────────────────────────────────────────────── */
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: linear-gradient(135deg, #003268, #0052a3);
+      color: #fff;
+      border: none;
+      padding: 11px 28px;
+      border-radius: 7px;
+      font-size: 14.5px;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 0.2px;
+      box-shadow: 0 2px 8px rgba(0,50,104,.38);
+      transition: transform .14s, box-shadow .14s;
+      font-family: inherit;
+    }
+    .btn-primary:hover  { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,50,104,.45); }
+    .btn-primary:active { transform: none; }
+    .btn-primary:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+
+    .btn-outline {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #fff;
+      color: #003268;
+      border: 1.5px solid #003268;
+      padding: 9px 20px;
+      border-radius: 7px;
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .14s;
+      font-family: inherit;
+    }
+    .btn-outline:hover { background: #f0f4fb; }
+
+    /* ── Error Banner ─────────────────────────────────────────── */
+    .error-banner {
+      display: none;
+      margin-top: 14px;
+      padding: 13px 16px;
+      background: #fde8e8;
+      border: 1px solid #f5c2c2;
+      border-left: 4px solid #b71c1c;
+      border-radius: 6px;
+      color: #7d1010;
+      font-size: 13.5px;
+      line-height: 1.5;
+    }
+
+    /* ── Loading Overlay ──────────────────────────────────────── */
+    #loadingOverlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,10,30,.55);
+      backdrop-filter: blur(5px);
+      z-index: 9000;
+      align-items: center;
+      justify-content: center;
+    }
+    #loadingOverlay.on { display: flex; }
+    .loading-box {
+      background: #fff;
+      border-radius: 14px;
+      padding: 38px 52px;
+      text-align: center;
+      box-shadow: 0 24px 64px rgba(0,0,0,.28);
+      max-width: 340px;
+    }
+    .spinner {
+      width: 46px; height: 46px;
+      border: 4px solid #dde4f0;
+      border-top-color: #003268;
+      border-radius: 50%;
+      animation: spin .75s linear infinite;
+      margin: 0 auto 18px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-box h3  { font-size: 16px; font-weight: 600; color: #1a2744; margin-bottom: 6px; }
+    .loading-box p   { font-size: 12.5px; color: #6b7fa3; line-height: 1.5; }
+    .loading-dots::after {
+      content: '';
+      animation: dots 1.4s steps(4, end) infinite;
+    }
+    @keyframes dots {
+      0%   { content: ''; }
+      25%  { content: '.'; }
+      50%  { content: '..'; }
+      75%  { content: '...'; }
+      100% { content: ''; }
+    }
+
+    /* ── Results ──────────────────────────────────────────────── */
+    #results { display: none; }
+
+    /* Report Banner */
+    .report-banner {
+      background: linear-gradient(135deg, #001e47, #003268 60%, #004080);
+      color: #fff;
+      border-radius: 10px;
+      padding: 22px 26px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.2);
+    }
+    .report-banner .rb-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: rgba(255,255,255,.5);
+      margin-bottom: 6px;
+    }
+    .report-banner h3 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 14px;
+      line-height: 1.3;
+    }
+    .rb-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+    .rb-item { display: flex; flex-direction: column; gap: 2px; }
+    .rb-item .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .7px; color: rgba(255,255,255,.45); }
+    .rb-item .val { font-size: 13.5px; color: rgba(255,255,255,.9); font-weight: 500; }
+
+    /* Stats Row */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .stat-box {
+      background: #fff;
+      border-radius: 8px;
+      padding: 16px 18px;
+      border-left: 4px solid #003268;
+      box-shadow: 0 1px 5px rgba(0,0,0,.06);
+    }
+    .stat-box.s-high   { border-left-color: #b71c1c; }
+    .stat-box.s-medium { border-left-color: #e65100; }
+    .stat-box.s-low    { border-left-color: #1b5e20; }
+    .stat-num  { font-size: 30px; font-weight: 700; color: #1a2744; line-height: 1; }
+    .stat-lbl  { font-size: 11px; color: #6b7fa3; text-transform: uppercase; letter-spacing: .5px; margin-top: 4px; }
+
+    /* ── Risk Table ───────────────────────────────────────────── */
+    .tbl-wrap {
+      overflow-x: auto;
+      border: 1px solid #dde4f0;
+      border-radius: 8px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      min-width: 900px;
+    }
+    thead tr { background: linear-gradient(90deg, #001e47, #003268); color: #fff; }
+    thead th {
+      padding: 12px 14px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .5px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    tbody tr { border-bottom: 1px solid #ecf0f8; transition: background .1s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #f6f8fd; }
+    td { padding: 12px 14px; vertical-align: top; }
+
+    .risk-id-cell {
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      font-weight: 700;
+      color: #003268;
+      white-space: nowrap;
+    }
+    .cat-chip {
+      display: inline-block;
+      background: #eef2fb;
+      color: #2c4880;
+      border-radius: 4px;
+      padding: 3px 8px;
+      font-size: 11.5px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .desc-cell, .mit-cell {
+      max-width: 260px;
+      color: #3a4f6e;
+      line-height: 1.55;
+    }
+    .score-bubble {
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .score-bubble.high   { background: #b71c1c; }
+    .score-bubble.medium { background: #e65100; }
+    .score-bubble.low    { background: #1b5e20; }
+
+    .level-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11.5px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .level-badge::before { content: '●'; font-size: 9px; }
+    .level-badge.high   { background: #fde8e8; color: #7d1010; }
+    .level-badge.medium { background: #fff3e0; color: #7d3800; }
+    .level-badge.low    { background: #e8f5e9; color: #1b5e20; }
+
+    .num-cell { text-align: center; font-weight: 700; color: #3a4f6e; }
+    .owner-cell { color: #3a4f6e; font-size: 12.5px; min-width: 150px; }
+
+    /* ── Heat Map ─────────────────────────────────────────────── */
+    .hm-body { padding: 22px; }
+    .hm-flex {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .hm-y-label {
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      font-size: 11px;
+      font-weight: 700;
+      color: #6b7fa3;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      align-self: center;
+      flex-shrink: 0;
+    }
+    .hm-main { flex: 1; min-width: 0; }
+    .hm-grid {
+      display: grid;
+      grid-template-columns: 24px repeat(5, 1fr);
+      gap: 3px;
+    }
+    /* Cells */
+    .hm-cell {
+      min-height: 68px;
+      border-radius: 5px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 5px;
+      position: relative;
+    }
+    .hm-cell.c-green  { background: #c8e6c9; }
+    .hm-cell.c-amber  { background: #ffe0b2; }
+    .hm-cell.c-red    { background: #ffcdd2; }
+    .hm-row-lbl {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 4px;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #6b7fa3;
+    }
+    .hm-col-lbl {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #6b7fa3;
+      padding-top: 2px;
+    }
+    .hm-x-label {
+      text-align: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: #6b7fa3;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-top: 8px;
+    }
+    /* Risk pins */
+    .pin {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      color: #fff;
+      cursor: default;
+      transition: transform .14s;
+      position: relative;
+    }
+    .pin:hover { transform: scale(1.25); z-index: 20; }
+    .pin.high   { background: #b71c1c; box-shadow: 0 2px 6px rgba(183,28,28,.45); }
+    .pin.medium { background: #e65100; box-shadow: 0 2px 6px rgba(230,81,0,.45); }
+    .pin.low    { background: #1b5e20; box-shadow: 0 2px 6px rgba(27,94,32,.45); }
+
+    /* Legend */
+    .hm-legend {
+      display: flex;
+      gap: 22px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+    .leg-item { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #3a4f6e; }
+    .leg-dot  { width: 14px; height: 14px; border-radius: 3px; }
+    .leg-dot.green  { background: #1b5e20; }
+    .leg-dot.amber  { background: #e65100; }
+    .leg-dot.red    { background: #b71c1c; }
+
+    /* ── Action Bar ───────────────────────────────────────────── */
+    .action-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 20px;
+      padding: 14px 18px;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 1px 5px rgba(0,0,0,.06);
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .action-bar p { font-size: 11.5px; color: #8499ba; max-width: 520px; line-height: 1.5; }
+    .action-bar .btns { display: flex; gap: 10px; }
+
+    /* ── Footer ───────────────────────────────────────────────── */
+    .site-footer {
+      text-align: center;
+      padding: 20px 16px;
+      color: #8499ba;
+      font-size: 11.5px;
+      border-top: 1px solid #dde4f0;
+      margin-top: 48px;
+    }
+
+    /* ── Print ────────────────────────────────────────────────── */
+    @media print {
+      .site-header .header-pill,
+      #formSection,
+      .action-bar,
+      #loadingOverlay,
+      .site-footer { display: none !important; }
+      body { background: #fff; }
+      .card { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; }
+      .report-banner { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .hm-cell, .score-bubble, .level-badge, .cat-chip { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+
+    /* ── Responsive ───────────────────────────────────────────── */
+    @media (max-width: 860px) {
+      .form-grid   { grid-template-columns: 1fr; }
+      .stats-row   { grid-template-columns: 1fr 1fr; }
+      .header-pill { display: none; }
+    }
+    @media (max-width: 560px) {
+      .page-wrap { padding: 16px; }
+      .stats-row { grid-template-columns: 1fr 1fr; }
+      .hm-grid   { grid-template-columns: 20px repeat(5, 1fr); gap: 2px; }
+      .hm-cell   { min-height: 50px; }
+      .pin       { width: 22px; height: 22px; font-size: 9px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══ HEADER ═══ -->
+<header class="site-header">
+  <div class="header-inner">
+    <div class="header-logo">DCT</div>
+    <div class="header-titles">
+      <h1>Event Risk Agent</h1>
+      <p>Department of Culture and Tourism &mdash; Risk Management Platform</p>
+    </div>
+    <div class="header-pill">Official Use</div>
+  </div>
+</header>
+
+<!-- ═══ PAGE ═══ -->
+<div class="page-wrap">
+
+  <!-- ─── INPUT FORM ─── -->
+  <div class="card" id="formSection">
+    <div class="card-head">
+      <div class="ico">&#128203;</div>
+      <h2>Event Details</h2>
+    </div>
+    <div class="card-body">
+      <form id="riskForm" novalidate>
+        <div class="form-grid">
+
+          <div class="form-group">
+            <label for="fEventName">Event Name</label>
+            <input type="text" id="fEventName" placeholder="e.g. Abu Dhabi International Book Fair 2025" required>
+          </div>
+
+          <div class="form-group">
+            <label for="fVenue">Venue</label>
+            <input type="text" id="fVenue" placeholder="e.g. ADNEC &ndash; Abu Dhabi National Exhibition Centre" required>
+          </div>
+
+          <div class="form-group">
+            <label for="fDate">Event Date</label>
+            <input type="date" id="fDate" required>
+          </div>
+
+          <div class="form-group">
+            <label for="fAttendance">Expected Attendance</label>
+            <input type="number" id="fAttendance" min="1" placeholder="e.g. 25000" required>
+          </div>
+
+          <div class="form-group span2">
+            <label for="fEventType">Event Type</label>
+            <select id="fEventType" required>
+              <option value="" disabled selected>&mdash; Select event type &mdash;</option>
+              <option value="concert">Concert / Live Music</option>
+              <option value="festival">Festival / Cultural Festival</option>
+              <option value="exhibition">Exhibition / Trade Show</option>
+              <option value="sports">Sports Event</option>
+              <option value="vip">VIP / Diplomatic Event</option>
+            </select>
+          </div>
+
+        </div><!-- /form-grid -->
+
+        <div class="form-footer">
+          <button type="submit" class="btn-primary" id="submitBtn">
+            &#9889; Generate Risk Register
+          </button>
+          <span class="hint">Powered by Claude AI &nbsp;&middot;&nbsp; ISO&nbsp;31000 aligned</span>
+        </div>
+      </form>
+
+      <div class="error-banner" id="errorBanner"></div>
+    </div>
+  </div><!-- /form card -->
+
+
+  <!-- ─── RESULTS ─── -->
+  <div id="results">
+
+    <!-- Report banner -->
+    <div class="report-banner">
+      <div class="rb-label">Risk Register &mdash; Official Document</div>
+      <h3 id="rTitle">&mdash;</h3>
+      <div class="rb-meta">
+        <div class="rb-item"><span class="lbl">Venue</span><span class="val" id="rVenue">&mdash;</span></div>
+        <div class="rb-item"><span class="lbl">Date</span><span class="val" id="rDate">&mdash;</span></div>
+        <div class="rb-item"><span class="lbl">Attendance</span><span class="val" id="rAttendance">&mdash;</span></div>
+        <div class="rb-item"><span class="lbl">Event Type</span><span class="val" id="rType">&mdash;</span></div>
+        <div class="rb-item"><span class="lbl">Generated</span><span class="val" id="rGenerated">&mdash;</span></div>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-row">
+      <div class="stat-box">
+        <div class="stat-num" id="sTotal">0</div>
+        <div class="stat-lbl">Total Risks</div>
+      </div>
+      <div class="stat-box s-high">
+        <div class="stat-num" id="sHigh">0</div>
+        <div class="stat-lbl">High Risk</div>
+      </div>
+      <div class="stat-box s-medium">
+        <div class="stat-num" id="sMedium">0</div>
+        <div class="stat-lbl">Medium Risk</div>
+      </div>
+      <div class="stat-box s-low">
+        <div class="stat-num" id="sLow">0</div>
+        <div class="stat-lbl">Low Risk</div>
+      </div>
+    </div>
+
+    <!-- Risk Register Table -->
+    <div class="card">
+      <div class="card-head">
+        <div class="ico">&#128202;</div>
+        <h2>Risk Register</h2>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Risk ID</th>
+              <th>Category</th>
+              <th>Description</th>
+              <th style="text-align:center">L</th>
+              <th style="text-align:center">I</th>
+              <th style="text-align:center">Score</th>
+              <th>Level</th>
+              <th>Mitigation Action</th>
+              <th>Owner</th>
+            </tr>
+          </thead>
+          <tbody id="riskTbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Heat Map -->
+    <div class="card">
+      <div class="card-head">
+        <div class="ico">&#127968;</div>
+        <h2>Risk Heat Map</h2>
+      </div>
+      <div class="hm-body">
+        <div class="hm-flex">
+          <div class="hm-y-label">Likelihood &uarr;</div>
+          <div class="hm-main">
+            <div class="hm-grid" id="heatGrid"><!-- JS-built --></div>
+            <div class="hm-x-label">Impact &rarr;</div>
+          </div>
+        </div>
+        <div class="hm-legend">
+          <div class="leg-item"><div class="leg-dot green"></div>Low Risk &nbsp;(Score &le;&nbsp;5)</div>
+          <div class="leg-item"><div class="leg-dot amber"></div>Medium Risk &nbsp;(Score 6&ndash;12)</div>
+          <div class="leg-item"><div class="leg-dot red"></div>High Risk &nbsp;(Score &ge;&nbsp;13)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action bar -->
+    <div class="action-bar">
+      <p>This risk register was generated by the DCT Event Risk Agent using Claude AI.
+         All risks should be reviewed and validated by a qualified risk officer before formal submission.</p>
+      <div class="btns">
+        <button class="btn-outline" onclick="window.print()">&#128438; Print Report</button>
+        <button class="btn-outline" id="newReportBtn">&#43; New Report</button>
+      </div>
+    </div>
+
+  </div><!-- /results -->
+
+</div><!-- /page-wrap -->
+
+<!-- ═══ FOOTER ═══ -->
+<footer class="site-footer">
+  DCT Event Risk Agent &nbsp;&middot;&nbsp; Department of Culture and Tourism &nbsp;&middot;&nbsp;
+  AI-assisted risk assessment &nbsp;&middot;&nbsp; For official use only
+</footer>
+
+<!-- ═══ LOADING OVERLAY ═══ -->
+<div id="loadingOverlay">
+  <div class="loading-box">
+    <div class="spinner"></div>
+    <h3>Generating Risk Register</h3>
+    <p>Analysing event parameters and identifying risks<span class="loading-dots"></span></p>
+  </div>
+</div>
+
+
+<script>
+/* ─────────────────────────────────────────
+   Helpers
+───────────────────────────────────────── */
+function levelOf(score) {
+  if (score <= 5)  return 'low';
+  if (score <= 12) return 'medium';
+  return 'high';
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-GB', {
+    day: 'numeric', month: 'long', year: 'numeric'
+  });
+}
+
+function fmtNum(n) {
+  return parseInt(n, 10).toLocaleString('en-GB');
+}
+
+function titleCase(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/* ─────────────────────────────────────────
+   Build Stats
+───────────────────────────────────────── */
+function buildStats(risks) {
+  const h = risks.filter(r => levelOf(r.risk_score) === 'high').length;
+  const m = risks.filter(r => levelOf(r.risk_score) === 'medium').length;
+  const l = risks.filter(r => levelOf(r.risk_score) === 'low').length;
+  document.getElementById('sTotal').textContent  = risks.length;
+  document.getElementById('sHigh').textContent   = h;
+  document.getElementById('sMedium').textContent = m;
+  document.getElementById('sLow').textContent    = l;
+}
+
+/* ─────────────────────────────────────────
+   Build Table
+───────────────────────────────────────── */
+function buildTable(risks) {
+  const tbody = document.getElementById('riskTbody');
+  tbody.innerHTML = '';
+  const labels = { high: 'High', medium: 'Medium', low: 'Low' };
+
+  risks.forEach(r => {
+    const lv = levelOf(r.risk_score);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="risk-id-cell">${esc(r.risk_id)}</span></td>
+      <td><span class="cat-chip">${esc(r.category)}</span></td>
+      <td><div class="desc-cell">${esc(r.description)}</div></td>
+      <td class="num-cell">${r.likelihood}</td>
+      <td class="num-cell">${r.impact}</td>
+      <td style="text-align:center"><span class="score-bubble ${lv}">${r.risk_score}</span></td>
+      <td><span class="level-badge ${lv}">${labels[lv]}</span></td>
+      <td><div class="mit-cell">${esc(r.mitigation_action)}</div></td>
+      <td><div class="owner-cell">${esc(r.owner)}</div></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function esc(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/* ─────────────────────────────────────────
+   Build Heat Map
+   Grid layout: 6 cols (label + 5 data), rows top→bottom = L5..L1 then x-labels
+───────────────────────────────────────── */
+function cellClass(l, i) {
+  const s = l * i;
+  if (s <= 5)  return 'c-green';
+  if (s <= 12) return 'c-amber';
+  return 'c-red';
+}
+
+function buildHeatMap(risks) {
+  const grid = document.getElementById('heatGrid');
+  grid.innerHTML = '';
+
+  // Rows: likelihood 5 → 1 (top to bottom), plus bottom label row
+  for (let row = 0; row <= 5; row++) {
+    const likelihood = 5 - row;  // 5,4,3,2,1 then bottom labels (row=5)
+
+    if (row < 5) {
+      /* Y-axis label */
+      const lbl = document.createElement('div');
+      lbl.className = 'hm-row-lbl';
+      lbl.textContent = likelihood;
+      grid.appendChild(lbl);
+
+      /* 5 data cells */
+      for (let impact = 1; impact <= 5; impact++) {
+        const cell = document.createElement('div');
+        cell.className = `hm-cell ${cellClass(likelihood, impact)}`;
+        cell.title = `L=${likelihood}  I=${impact}  Score=${likelihood * impact}`;
+
+        /* Place risk pins */
+        risks
+          .filter(r => r.likelihood === likelihood && r.impact === impact)
+          .forEach(r => {
+            const pin = document.createElement('div');
+            const lv  = levelOf(r.risk_score);
+            pin.className = `pin ${lv}`;
+            pin.textContent = r.risk_id.replace(/^R0*/, '');
+            pin.title = `${r.risk_id}: ${r.category}\n${r.description}`;
+            cell.appendChild(pin);
+          });
+
+        grid.appendChild(cell);
+      }
+    } else {
+      /* Bottom row: corner + impact labels 1-5 */
+      const corner = document.createElement('div');
+      grid.appendChild(corner);   // empty corner
+
+      for (let impact = 1; impact <= 5; impact++) {
+        const lbl = document.createElement('div');
+        lbl.className = 'hm-col-lbl';
+        lbl.textContent = impact;
+        grid.appendChild(lbl);
+      }
+    }
+  }
+}
+
+/* ─────────────────────────────────────────
+   Form Submit
+───────────────────────────────────────── */
+document.getElementById('riskForm').addEventListener('submit', async function (e) {
+  e.preventDefault();
+
+  const eventName = document.getElementById('fEventName').value.trim();
+  const venue     = document.getElementById('fVenue').value.trim();
+  const date      = document.getElementById('fDate').value;
+  const attendance= document.getElementById('fAttendance').value.trim();
+  const eventType = document.getElementById('fEventType').value;
+
+  const errBanner = document.getElementById('errorBanner');
+  errBanner.style.display = 'none';
+
+  if (!eventName || !venue || !date || !attendance || !eventType) {
+    errBanner.textContent = '⚠ Please complete all fields before generating.';
+    errBanner.style.display = 'block';
+    return;
+  }
+
+  /* Show loading */
+  document.getElementById('submitBtn').disabled = true;
+  document.getElementById('loadingOverlay').classList.add('on');
+
+  try {
+    const resp = await fetch('/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event_name: eventName,
+        venue,
+        date,
+        attendance,
+        event_type: eventType
+      })
+    });
+
+    const data = await resp.json();
+
+    if (!resp.ok || data.error) {
+      throw new Error(data.error || `Server error ${resp.status}`);
+    }
+
+    const risks = data.risks || [];
+    if (risks.length === 0) throw new Error('No risks were returned. Please try again.');
+
+    /* Populate report header */
+    const typeLabels = {
+      concert: 'Concert / Live Music', festival: 'Festival / Cultural Festival',
+      exhibition: 'Exhibition / Trade Show', sports: 'Sports Event', vip: 'VIP / Diplomatic Event'
+    };
+    document.getElementById('rTitle').textContent       = eventName;
+    document.getElementById('rVenue').textContent       = venue;
+    document.getElementById('rDate').textContent        = fmtDate(date);
+    document.getElementById('rAttendance').textContent  = fmtNum(attendance);
+    document.getElementById('rType').textContent        = typeLabels[eventType] || titleCase(eventType);
+    document.getElementById('rGenerated').textContent   = new Date().toLocaleString('en-GB', {
+      day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+
+    buildStats(risks);
+    buildTable(risks);
+    buildHeatMap(risks);
+
+    /* Switch view */
+    document.getElementById('formSection').style.display = 'none';
+    document.getElementById('results').style.display     = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  } catch (err) {
+    errBanner.innerHTML = '&#9888; ' + esc(err.message);
+    errBanner.style.display = 'block';
+  } finally {
+    document.getElementById('submitBtn').disabled = false;
+    document.getElementById('loadingOverlay').classList.remove('on');
+  }
+});
+
+/* ─────────────────────────────────────────
+   New Report button
+───────────────────────────────────────── */
+document.getElementById('newReportBtn').addEventListener('click', function () {
+  document.getElementById('results').style.display     = 'none';
+  document.getElementById('formSection').style.display = 'block';
+  document.getElementById('errorBanner').style.display = 'none';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+</script>
+</body>
+</html>
