@@ -63,6 +63,17 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/health")
+def health():
+    raw = os.environ.get("ANTHROPIC_API_KEY", "")
+    key = raw.strip()
+    return jsonify({
+        "api_key_set": bool(key),
+        "api_key_length": len(key),
+        "api_key_prefix": key[:10] if key else None,
+    })
+
+
 @app.route("/generate", methods=["POST"])
 def generate():
     data = request.get_json(silent=True)
@@ -117,7 +128,7 @@ For each risk:
 
     api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
-        return jsonify({"error": "ANTHROPIC_API_KEY is not configured on the server."}), 500
+        return jsonify({"error": "ANTHROPIC_API_KEY is not set on the server. Add it in Vercel → Settings → Environment Variables."}), 500
 
     try:
         client = anthropic.Anthropic(api_key=api_key)
@@ -145,8 +156,11 @@ For each risk:
         return jsonify({"error": "The AI returned no text response. Please try again."}), 500
     except json.JSONDecodeError as exc:
         return jsonify({"error": f"Could not parse AI response as JSON: {exc}"}), 500
+    except TypeError as exc:
+        # SDK raises TypeError when api_key resolves to None at request time
+        return jsonify({"error": f"API key configuration error: {exc}"}), 500
     except anthropic.AuthenticationError:
-        return jsonify({"error": "Invalid API key. Set ANTHROPIC_API_KEY in your environment."}), 401
+        return jsonify({"error": "Invalid API key. Check the value in Vercel → Settings → Environment Variables."}), 401
     except anthropic.RateLimitError:
         return jsonify({"error": "API rate limit reached. Please wait a moment and try again."}), 429
     except anthropic.APIError as exc:
