@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+{% block title %}Agency Coordination · DCT Risk Intelligence{% endblock %}
+{% block page_title %}Agency Coordination{% endblock %}
+{% block page_sub %}Cross-agency risk sharing and coordination matrix{% endblock %}
+
+{% block top_actions %}
+  <button class="btn-primary" onclick="openAgencyModal()">&#43; Add Agency</button>
+{% endblock %}
+
+{% block content %}
+<!-- Matrix Summary -->
+<div class="card" id="matrixCard">
+  <div class="card-head"><span class="card-title">&#9969; Risk Sharing Matrix</span></div>
+  <div class="card-body" id="matrixBody">
+    <p class="empty-msg">Loading…</p>
+  </div>
+</div>
+
+<!-- Agency List -->
+<div class="card mt16">
+  <div class="card-head">
+    <span class="card-title" id="agencyCount">Agencies</span>
+    <button class="btn-ghost btn-sm" onclick="loadAgencies()">&#8635; Refresh</button>
+  </div>
+  <div class="card-body p0">
+    <table class="data-table">
+      <thead>
+        <tr><th>Agency Name</th><th>Type</th><th>Contact</th><th>Email</th><th>Risk Sharing</th><th>Actions</th></tr>
+      </thead>
+      <tbody id="agencyTbody">
+        <tr><td colspan="6" class="empty-msg">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Shared Risks View -->
+<div class="card mt16">
+  <div class="card-head">
+    <span class="card-title">&#128737; Shared Risk View</span>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select id="agencySelect" style="width:220px" onchange="loadSharedRisks()">
+        <option value="">Select agency…</option>
+      </select>
+    </div>
+  </div>
+  <div class="card-body p0">
+    <table class="data-table">
+      <thead>
+        <tr><th>Risk ID</th><th>Title</th><th>Level</th><th>Category</th><th>Score</th><th>Status</th></tr>
+      </thead>
+      <tbody id="sharedRisksTbody">
+        <tr><td colspan="6" class="empty-msg">Select an agency to view shared risks.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Agency Modal -->
+<div class="modal-bg" id="agencyModal">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-head">
+      <h3 id="agencyModalTitle">Add Agency</h3>
+      <button class="modal-close" onclick="closeModal('agencyModal')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editAgencyId">
+      <div class="form-group"><label>Agency Name *</label>
+        <input type="text" id="aName" placeholder="e.g. Abu Dhabi Police"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Type</label>
+          <select id="aType">
+            <option value="Internal">Internal</option>
+            <option value="External">External</option>
+            <option value="Regulator">Regulator</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Risk Sharing Level</label>
+          <select id="aSharing">
+            <option value="Full">Full</option>
+            <option value="Summary" selected>Summary</option>
+            <option value="None">None</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Contact Name</label>
+          <input type="text" id="aContact" placeholder="Full name">
+        </div>
+        <div class="form-group"><label>Email</label>
+          <input type="email" id="aEmail" placeholder="contact@agency.ae">
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-ghost" onclick="closeModal('agencyModal')">Cancel</button>
+      <button class="btn-primary" onclick="saveAgency()">Save Agency</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let agencies = [];
+
+async function loadMatrix() {
+  try {
+    const data = await fetch('/api/coordination/matrix').then(r=>r.json());
+    const body = document.getElementById('matrixBody');
+    if (!data.agencies.length) {
+      body.innerHTML = '<p class="empty-msg">No agencies configured yet.</p>';
+      return;
+    }
+    const cats = data.categories.slice(0,6);
+    body.innerHTML = `<div class="matrix-wrap">
+      <table class="data-table matrix-table">
+        <thead>
+          <tr><th>Agency</th><th>Type</th><th>Sharing</th>${cats.map(c=>`<th class="matrix-cat">${esc(c)}</th>`).join('')}</tr>
+        </thead>
+        <tbody>
+          ${data.agencies.map(a => `
+            <tr>
+              <td class="bold">${esc(a.name)}</td>
+              <td><span class="cat-chip">${esc(a.type)}</span></td>
+              <td><span class="sharing-badge ${(a.risk_sharing_level||'').toLowerCase()}">${esc(a.risk_sharing_level||'Summary')}</span></td>
+              ${cats.map(c => {
+                const count = data.risk_counts[c]||0;
+                const shared = a.risk_sharing_level!=='None' ? count : 0;
+                return `<td class="matrix-cell ${shared>0?'has-risk':''}">${shared>0?shared:''}</td>`;
+              }).join('')}
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  } catch(e) {
+    document.getElementById('matrixBody').innerHTML = `<p class="empty-msg error">${esc(e.message)}</p>`;
+  }
+}
+
+async function loadAgencies() {
+  const tbody = document.getElementById('agencyTbody');
+  tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">Loading…</td></tr>';
+  try {
+    agencies = await fetch('/api/agencies').then(r=>r.json());
+    document.getElementById('agencyCount').textContent = `${agencies.length} Agenc${agencies.length!==1?'ies':'y'}`;
+    const sel = document.getElementById('agencySelect');
+    sel.innerHTML = '<option value="">Select agency…</option>' +
+      agencies.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('');
+
+    if (!agencies.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">No agencies yet — add your first agency.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = agencies.map(a => {
+      const sharingClass = {Full:'high',Summary:'medium',None:'low'}[a.risk_sharing_level]||'low';
+      return `<tr>
+        <td class="bold">${esc(a.name)}</td>
+        <td><span class="cat-chip">${esc(a.type||'—')}</span></td>
+        <td class="muted">${esc(a.contact_name||'—')}</td>
+        <td class="muted small">${esc(a.contact_email||'—')}</td>
+        <td><span class="score-bubble ${sharingClass}" style="font-size:11px;padding:3px 8px">${esc(a.risk_sharing_level||'Summary')}</span></td>
+        <td>
+          <div class="row-actions">
+            <button class="btn-icon" onclick="openEditAgency(${a.id})">&#9998;</button>
+            <button class="btn-icon danger" onclick="deleteAgency(${a.id})">&#10006;</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="6" class="empty-msg error">${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function loadSharedRisks() {
+  const id = document.getElementById('agencySelect').value;
+  const tbody = document.getElementById('sharedRisksTbody');
+  if (!id) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">Select an agency.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">Loading…</td></tr>';
+  try {
+    const data = await fetch(`/api/coordination/shared-risks?agency_id=${id}`).then(r=>r.json());
+    if (!data.risks.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">No risks to share with this agency.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.risks.map(r => {
+      const lv = scoreLevel(r.risk_score||0);
+      return `<tr>
+        <td><span class="risk-id-tag">${esc(r.risk_id||'—')}</span></td>
+        <td>${esc(r.title||'—')}</td>
+        <td><span class="level-chip ${r.level||''}">${r.level||''}</span></td>
+        <td>${esc(r.category||'—')}</td>
+        <td><span class="score-bubble ${lv}">${r.risk_score||0}</span></td>
+        <td><span class="status-badge ${(r.status||'').toLowerCase()}">${esc(r.status||'—')}</span></td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="6" class="empty-msg error">${esc(e.message)}</td></tr>`;
+  }
+}
+
+function openAgencyModal() {
+  document.getElementById('editAgencyId').value = '';
+  document.getElementById('agencyModalTitle').textContent = 'Add Agency';
+  ['aName','aContact','aEmail'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('aType').value = 'External';
+  document.getElementById('aSharing').value = 'Summary';
+  document.getElementById('agencyModal').classList.add('open');
+}
+
+function openEditAgency(id) {
+  const a = agencies.find(x=>x.id===id);
+  if (!a) return;
+  document.getElementById('editAgencyId').value = a.id;
+  document.getElementById('agencyModalTitle').textContent = 'Edit Agency';
+  document.getElementById('aName').value    = a.name||'';
+  document.getElementById('aType').value   = a.type||'External';
+  document.getElementById('aSharing').value= a.risk_sharing_level||'Summary';
+  document.getElementById('aContact').value= a.contact_name||'';
+  document.getElementById('aEmail').value  = a.contact_email||'';
+  document.getElementById('agencyModal').classList.add('open');
+}
+
+async function saveAgency() {
+  const id   = document.getElementById('editAgencyId').value;
+  const name = document.getElementById('aName').value.trim();
+  if (!name) { showToast('Agency name is required','error'); return; }
+  const body = {
+    name, type: document.getElementById('aType').value,
+    risk_sharing_level: document.getElementById('aSharing').value,
+    contact_name:  document.getElementById('aContact').value.trim(),
+    contact_email: document.getElementById('aEmail').value.trim(),
+  };
+  const url    = id ? `/api/agencies/${id}` : '/api/agencies';
+  const method = id ? 'PUT' : 'POST';
+  try {
+    const resp = await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    closeModal('agencyModal');
+    showToast(id?'Agency updated':'Agency added','success');
+    loadAgencies();
+    loadMatrix();
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+async function deleteAgency(id) {
+  if (!confirm('Delete this agency?')) return;
+  await fetch(`/api/agencies/${id}`,{method:'DELETE'});
+  showToast('Agency deleted','success');
+  loadAgencies();
+  loadMatrix();
+}
+
+loadMatrix();
+loadAgencies();
+</script>
+{% endblock %}

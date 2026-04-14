@@ -1,0 +1,466 @@
+{% extends "base.html" %}
+{% block title %}Risk Register · DCT Risk Intelligence{% endblock %}
+{% block page_title %}Risk Register{% endblock %}
+{% block page_sub %}4-level hierarchical risk management · ISO 31000 compliant{% endblock %}
+
+{% block top_actions %}
+  <button class="btn-outline" onclick="openAddModal()">&#43; Manual Entry</button>
+  <button class="btn-primary" onclick="openGenerateModal()">&#9889; AI Generate</button>
+{% endblock %}
+
+{% block content %}
+<!-- Filters -->
+<div class="filter-bar card">
+  <div class="filter-group">
+    <label>Level</label>
+    <select id="fLevel" onchange="loadRisks()">
+      <option value="">All Levels</option>
+      <option value="enterprise">Enterprise</option>
+      <option value="affiliate">Affiliate</option>
+      <option value="department">Department</option>
+      <option value="event">Event</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>Status</label>
+    <select id="fStatus" onchange="loadRisks()">
+      <option value="">All Statuses</option>
+      <option value="Open">Open</option>
+      <option value="Mitigating">Mitigating</option>
+      <option value="Accepted">Accepted</option>
+      <option value="Closed">Closed</option>
+    </select>
+  </div>
+  <div class="filter-group flex-1">
+    <label>Entity / Search</label>
+    <input type="text" id="fEntity" placeholder="Search entity name…" oninput="loadRisks()">
+  </div>
+  <div class="filter-group">
+    <label>&nbsp;</label>
+    <button class="btn-ghost" onclick="clearFilters()">&#10006; Clear</button>
+  </div>
+</div>
+
+<!-- Risk Table -->
+<div class="card mt16">
+  <div class="card-head">
+    <span class="card-title" id="riskCount">Risks</span>
+    <div style="display:flex;gap:8px">
+      <button class="btn-ghost btn-sm" onclick="window.print()">&#128438; Export</button>
+    </div>
+  </div>
+  <div class="card-body p0">
+    <div class="table-scroll">
+      <table class="data-table" id="riskTable">
+        <thead>
+          <tr>
+            <th>Risk ID</th><th>Level</th><th>Entity</th><th>Category</th>
+            <th>Title</th><th>L</th><th>I</th><th>Score</th><th>Velocity</th>
+            <th>Status</th><th>Owner</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="riskTbody">
+          <tr><td colspan="12" class="empty-msg">Loading risks…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══ GENERATE MODAL ══ -->
+<div class="modal-bg" id="generateModal">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-head">
+      <h3>&#9889; AI Risk Register Generator</h3>
+      <button class="modal-close" onclick="closeModal('generateModal')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Risk Level *</label>
+          <select id="genLevel">
+            <option value="enterprise">Enterprise</option>
+            <option value="affiliate">Affiliate</option>
+            <option value="department">Department</option>
+            <option value="event" selected>Event</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Entity / Event Name *</label>
+          <input type="text" id="genEntity" placeholder="e.g. Abu Dhabi Film Festival 2025">
+        </div>
+      </div>
+      <div id="genEventFields">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Venue</label>
+            <input type="text" id="genVenue" placeholder="e.g. Manarat Al Saadiyat">
+          </div>
+          <div class="form-group">
+            <label>Date</label>
+            <input type="date" id="genDate">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Expected Attendance</label>
+            <input type="number" id="genAttendance" placeholder="e.g. 5000">
+          </div>
+          <div class="form-group">
+            <label>Event Type</label>
+            <select id="genEventType">
+              <option value="festival">Festival / Cultural</option>
+              <option value="concert">Concert / Live Music</option>
+              <option value="exhibition">Exhibition / Trade Show</option>
+              <option value="sports">Sports Event</option>
+              <option value="vip">VIP / Diplomatic</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div id="genSpinner" class="spinner-row" style="display:none">
+        <div class="spinner"></div>
+        <span>Claude is generating your risk register…</span>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-ghost" onclick="closeModal('generateModal')">Cancel</button>
+      <button class="btn-primary" onclick="generateRisks()">&#9889; Generate Risks</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ADD/EDIT MODAL ══ -->
+<div class="modal-bg" id="riskModal">
+  <div class="modal" style="max-width:720px">
+    <div class="modal-head">
+      <h3 id="riskModalTitle">Add Risk</h3>
+      <button class="modal-close" onclick="closeModal('riskModal')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editId">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Level *</label>
+          <select id="eLevel">
+            <option value="enterprise">Enterprise</option>
+            <option value="affiliate">Affiliate</option>
+            <option value="department">Department</option>
+            <option value="event">Event</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Entity Name *</label>
+          <input type="text" id="eEntity" placeholder="e.g. DCT Enterprise">
+        </div>
+        <div class="form-group">
+          <label>Category *</label>
+          <select id="eCategory">
+            <option>Strategic</option><option>Operational</option>
+            <option>Financial</option><option>Reputational</option>
+            <option>Safety</option><option>Compliance</option>
+            <option>Environmental</option><option>Security</option>
+            <option>Crowd Management</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Risk Title *</label>
+        <input type="text" id="eTitle" placeholder="Short descriptive risk title">
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <textarea id="eDesc" rows="3" placeholder="Describe the risk and its potential consequences…"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Likelihood (1–5)</label>
+          <input type="number" id="eLikelihood" min="1" max="5" value="3">
+        </div>
+        <div class="form-group">
+          <label>Impact (1–5)</label>
+          <input type="number" id="eImpact" min="1" max="5" value="3">
+        </div>
+        <div class="form-group">
+          <label>Velocity</label>
+          <select id="eVelocity">
+            <option>Immediate</option><option>Short-term</option><option>Long-term</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Status</label>
+          <select id="eStatus">
+            <option>Open</option><option>Mitigating</option>
+            <option>Accepted</option><option>Closed</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Mitigation</label>
+          <textarea id="eMitigation" rows="2"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Contingency</label>
+          <textarea id="eContingency" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Owner</label>
+          <input type="text" id="eOwner" placeholder="e.g. DCT Events Safety Manager">
+        </div>
+        <div class="form-group">
+          <label>Reviewer</label>
+          <input type="text" id="eReviewer" placeholder="e.g. DCT Risk Director">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>KRI</label>
+          <input type="text" id="eKri" placeholder="Key Risk Indicator">
+        </div>
+        <div class="form-group">
+          <label>KRI Threshold</label>
+          <input type="text" id="eKriThreshold" placeholder="e.g. > 3 incidents/month">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>AI Correlation</label>
+        <textarea id="eCorrelation" rows="2" placeholder="How does this risk link to or escalate other risks?"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-ghost" onclick="closeModal('riskModal')">Cancel</button>
+      <button class="btn-primary" onclick="saveRisk()">Save Risk</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ DETAIL MODAL ══ -->
+<div class="modal-bg" id="detailModal">
+  <div class="modal" style="max-width:760px">
+    <div class="modal-head">
+      <h3 id="detailTitle">Risk Detail</h3>
+      <button class="modal-close" onclick="closeModal('detailModal')">&#10005;</button>
+    </div>
+    <div class="modal-body" id="detailBody"></div>
+    <div class="modal-foot">
+      <button class="btn-ghost" onclick="closeModal('detailModal')">Close</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let risks = [];
+
+async function loadRisks() {
+  const level  = document.getElementById('fLevel').value;
+  const status = document.getElementById('fStatus').value;
+  const entity = document.getElementById('fEntity').value;
+  const params = new URLSearchParams();
+  if (level)  params.set('level', level);
+  if (status) params.set('status', status);
+  if (entity) params.set('entity', entity);
+
+  const tbody = document.getElementById('riskTbody');
+  tbody.innerHTML = '<tr><td colspan="12" class="empty-msg">Loading…</td></tr>';
+
+  try {
+    risks = await fetch('/api/risks?' + params).then(r => r.json());
+    document.getElementById('riskCount').textContent = `${risks.length} Risk${risks.length!==1?'s':''}`;
+    if (!risks.length) {
+      tbody.innerHTML = '<tr><td colspan="12" class="empty-msg">No risks found — use AI Generate or add manually.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = risks.map(r => {
+      const lv = scoreLevel(r.risk_score);
+      return `<tr onclick="viewDetail(${r.id})" style="cursor:pointer">
+        <td><span class="risk-id-tag">${esc(r.risk_id)}</span></td>
+        <td><span class="level-chip ${r.level}">${r.level||''}</span></td>
+        <td class="muted small">${esc(r.entity_name||'')}</td>
+        <td><span class="cat-chip">${esc(r.category||'')}</span></td>
+        <td class="bold">${esc(r.title||'')}</td>
+        <td class="num">${r.likelihood}</td>
+        <td class="num">${r.impact}</td>
+        <td><span class="score-bubble ${lv}">${r.risk_score}</span></td>
+        <td class="small muted">${esc(r.velocity||'')}</td>
+        <td><span class="status-badge ${(r.status||'').toLowerCase().replace(' ','-')}">${esc(r.status||'')}</span></td>
+        <td class="small muted">${esc(r.owner||'')}</td>
+        <td onclick="event.stopPropagation()">
+          <div class="row-actions">
+            <button class="btn-icon" title="Edit" onclick="openEditModal(${r.id})">&#9998;</button>
+            <button class="btn-icon danger" title="Delete" onclick="deleteRisk(${r.id})">&#10006;</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="12" class="empty-msg error">Error loading risks: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+function viewDetail(id) {
+  const r = risks.find(x => x.id === id);
+  if (!r) return;
+  const lv = scoreLevel(r.risk_score);
+  document.getElementById('detailTitle').innerHTML =
+    `<span class="risk-id-tag">${esc(r.risk_id)}</span> ${esc(r.title)}`;
+  document.getElementById('detailBody').innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-section">
+        <div class="dl"><dt>Level</dt><dd><span class="level-chip ${r.level}">${r.level}</span></dd></div>
+        <div class="dl"><dt>Entity</dt><dd>${esc(r.entity_name||'—')}</dd></div>
+        <div class="dl"><dt>Category</dt><dd><span class="cat-chip">${esc(r.category||'—')}</span></dd></div>
+        <div class="dl"><dt>Status</dt><dd><span class="status-badge ${(r.status||'').toLowerCase()}">${esc(r.status||'—')}</span></dd></div>
+        <div class="dl"><dt>Source</dt><dd>${esc(r.source||'—')}</dd></div>
+        <div class="dl"><dt>Velocity</dt><dd>${esc(r.velocity||'—')}</dd></div>
+      </div>
+      <div class="detail-section">
+        <div class="dl"><dt>Likelihood</dt><dd>${r.likelihood} / 5</dd></div>
+        <div class="dl"><dt>Impact</dt><dd>${r.impact} / 5</dd></div>
+        <div class="dl score-${lv}"><dt>Risk Score</dt><dd><strong>${r.risk_score}</strong> (${lv.charAt(0).toUpperCase()+lv.slice(1)})</dd></div>
+        <div class="dl"><dt>Owner</dt><dd>${esc(r.owner||'—')}</dd></div>
+        <div class="dl"><dt>Reviewer</dt><dd>${esc(r.reviewer||'—')}</dd></div>
+      </div>
+    </div>
+    <div class="detail-block"><h4>Description</h4><p>${esc(r.description||'—')}</p></div>
+    <div class="detail-block"><h4>Mitigation Actions</h4><p>${esc(r.mitigation||'—')}</p></div>
+    <div class="detail-block"><h4>Contingency Plan</h4><p>${esc(r.contingency||'—')}</p></div>
+    <div class="detail-block ai-block"><h4>&#129302; AI Correlation Insight</h4><p>${esc(r.ai_correlation||'—')}</p></div>
+    <div class="detail-grid">
+      <div class="detail-block"><h4>KRI</h4><p>${esc(r.kri||'—')}</p></div>
+      <div class="detail-block"><h4>KRI Threshold</h4><p>${esc(r.kri_threshold||'—')}</p></div>
+    </div>
+  `;
+  document.getElementById('detailModal').classList.add('open');
+}
+
+function openAddModal() {
+  document.getElementById('editId').value = '';
+  document.getElementById('riskModalTitle').textContent = 'Add Risk';
+  ['eLevel','eEntity','eCategory','eTitle','eDesc','eLikelihood','eImpact',
+   'eVelocity','eStatus','eMitigation','eContingency','eOwner','eReviewer',
+   'eKri','eKriThreshold','eCorrelation'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = el.tagName==='SELECT' ? el.options[0].value : (id==='eLikelihood'||id==='eImpact'?'3':'');
+  });
+  document.getElementById('riskModal').classList.add('open');
+}
+
+function openEditModal(id) {
+  const r = risks.find(x => x.id === id);
+  if (!r) return;
+  document.getElementById('editId').value      = r.id;
+  document.getElementById('riskModalTitle').textContent = 'Edit Risk';
+  document.getElementById('eLevel').value      = r.level||'event';
+  document.getElementById('eEntity').value     = r.entity_name||'';
+  document.getElementById('eCategory').value   = r.category||'Operational';
+  document.getElementById('eTitle').value      = r.title||'';
+  document.getElementById('eDesc').value       = r.description||'';
+  document.getElementById('eLikelihood').value = r.likelihood||3;
+  document.getElementById('eImpact').value     = r.impact||3;
+  document.getElementById('eVelocity').value   = r.velocity||'Short-term';
+  document.getElementById('eStatus').value     = r.status||'Open';
+  document.getElementById('eMitigation').value = r.mitigation||'';
+  document.getElementById('eContingency').value= r.contingency||'';
+  document.getElementById('eOwner').value      = r.owner||'';
+  document.getElementById('eReviewer').value   = r.reviewer||'';
+  document.getElementById('eKri').value        = r.kri||'';
+  document.getElementById('eKriThreshold').value= r.kri_threshold||'';
+  document.getElementById('eCorrelation').value= r.ai_correlation||'';
+  document.getElementById('riskModal').classList.add('open');
+}
+
+async function saveRisk() {
+  const id = document.getElementById('editId').value;
+  const body = {
+    level:          document.getElementById('eLevel').value,
+    entity_name:    document.getElementById('eEntity').value.trim(),
+    category:       document.getElementById('eCategory').value,
+    title:          document.getElementById('eTitle').value.trim(),
+    description:    document.getElementById('eDesc').value.trim(),
+    likelihood:     parseInt(document.getElementById('eLikelihood').value)||3,
+    impact:         parseInt(document.getElementById('eImpact').value)||3,
+    velocity:       document.getElementById('eVelocity').value,
+    status:         document.getElementById('eStatus').value,
+    mitigation:     document.getElementById('eMitigation').value.trim(),
+    contingency:    document.getElementById('eContingency').value.trim(),
+    owner:          document.getElementById('eOwner').value.trim(),
+    reviewer:       document.getElementById('eReviewer').value.trim(),
+    kri:            document.getElementById('eKri').value.trim(),
+    kri_threshold:  document.getElementById('eKriThreshold').value.trim(),
+    ai_correlation: document.getElementById('eCorrelation').value.trim(),
+  };
+  if (!body.title) { showToast('Risk title is required','error'); return; }
+
+  const url    = id ? `/api/risks/${id}` : '/api/risks';
+  const method = id ? 'PUT' : 'POST';
+  try {
+    const resp = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    closeModal('riskModal');
+    showToast(id ? 'Risk updated' : 'Risk added', 'success');
+    loadRisks();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function deleteRisk(id) {
+  if (!confirm('Delete this risk?')) return;
+  await fetch(`/api/risks/${id}`, {method:'DELETE'});
+  showToast('Risk deleted','success');
+  loadRisks();
+}
+
+function clearFilters() {
+  document.getElementById('fLevel').value = '';
+  document.getElementById('fStatus').value = '';
+  document.getElementById('fEntity').value = '';
+  loadRisks();
+}
+
+function openGenerateModal() {
+  document.getElementById('generateModal').classList.add('open');
+}
+
+async function generateRisks() {
+  const entity = document.getElementById('genEntity').value.trim();
+  if (!entity) { showToast('Entity / event name is required','error'); return; }
+
+  const body = {
+    level:       document.getElementById('genLevel').value,
+    entity_name: entity,
+    context: {
+      venue:      document.getElementById('genVenue').value.trim(),
+      date:       document.getElementById('genDate').value,
+      attendance: document.getElementById('genAttendance').value.trim(),
+      event_type: document.getElementById('genEventType').value,
+    }
+  };
+
+  document.getElementById('genSpinner').style.display = 'flex';
+  document.querySelector('#generateModal .btn-primary').disabled = true;
+
+  try {
+    const resp = await fetch('/api/risks/generate', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    closeModal('generateModal');
+    showToast(`Generated ${data.count} risks successfully`, 'success');
+    loadRisks();
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally {
+    document.getElementById('genSpinner').style.display = 'none';
+    document.querySelector('#generateModal .btn-primary').disabled = false;
+  }
+}
+
+loadRisks();
+</script>
+{% endblock %}

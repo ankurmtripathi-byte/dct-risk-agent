@@ -1,0 +1,204 @@
+import json
+from datetime import datetime
+
+import anthropic
+import requests
+from flask import Blueprint, jsonify, render_template, request
+
+from config import ANTHROPIC_API_KEY, MODEL_FAST, NEWSAPI_KEY
+from database import get_db
+
+news_bp = Blueprint("news", __name__)
+
+NEWSAPI_URL = "https://newsapi.org/v2/everything"
+DCT_QUERY   = (
+    "(\"Abu Dhabi\" OR UAE OR tourism OR \"cultural event\") AND "
+    "(risk OR safety OR security OR incident OR disruption OR "
+    "protest OR weather OR cyber OR fraud OR accident)"
+)
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+@news_bp.route("/news-monitor")
+def news_page():
+    return render_template("news_monitor.html")
+
+
+@news_bp.route("/api/news", methods=["GET"])
+def list_news():
+    conn = get_db()
+    items = [dict(r) for r in conn.execute(
+        "SELECT * FROM news_items ORDER BY fetched_date DESC LIMIT 100"
+    ).fetchall()]
+    for it in items:
+        try:
+            it["mapped_risk_categories"] = json.loads(it.get("mapped_risk_categories") or "[]")
+        except (ValueError, TypeError):
+            it["mapped_risk_categories"] = []
+    conn.close()
+    return jsonify(items)
+
+
+@news_bp.route("/api/news/fetch", methods=["POST"])
+def fetch_news():
+    if not NEWSAPI_KEY:
+        return jsonify(error="NEWSAPI_KEY not configured. Add it in Vercel → Settings → Environment Variables."), 500
+
+    data    = request.get_json(force=True) or {}
+    query   = data.get("query", DCT_QUERY)
+    page_sz = min(int(data.get("page_size", 20)), 50)
+
+    try:
+        resp = requests.get(NEWSAPI_URL, params={
+            "q":        query,
+            "language": "en",
+            "sortBy":   "publishedAt",
+            "pageSize": page_sz,
+            "apiKey":   NEWSAPI_KEY,
+        }, timeout=15)
+        resp.raise_for_status()
+        articles = resp.json().get("articles", [])
+    except requests.RequestException as e:
+        return jsonify(error=f"NewsAPI request failed: {e}"), 502
+
+    now  = datetime.utcnow().isoformat()
+    conn = get_db()
+    saved = 0
+    for art in articles:
+        url = art.get("url", "")
+        if conn.execute("SELECT 1 FROM news_items WHERE url=?", (url,)).fetchone():
+            continue
+        conn.execute("""
+            INSERT INTO news_items
+              (headline, source, url, published_date, fetched_date,
+               relevance_score, mapped_risk_categories, ai_analysis)
+            VALUES (?,?,?,?,?,?,?,?)
+        """, (
+            art.get("title",""),
+            (art.get("source") or {}).get("name",""),
+            url,
+            art.get("publishedAt",""),
+            now,
+            0, "[]", "",
+        ))
+        saved += 1
+    conn.commit()
+    conn.close()
+    return jsonify(fetched=len(articles), new=saved)
+
+
+@news_bp.route("/api/news/<int:item_id>/analyse", methods=["POST"])
+def analyse_news_item(item_id):
+    if not ANTHROPIC_API_KEY:
+        return jsonify(error="ANTHROPIC_API_KEY not configured"), 500
+
+    conn  = get_db()
+    item  = conn.execute("SELECT * FROM news_items WHERE id=?", (item_id,)).fetchone()
+    if not item:
+        conn.close()
+        return jsonify(error="News item not found"), 404
+    item = dict(item)
+
+    prompt = f"""You are a DCT risk analyst. Assess this news headline for relevance to the Department of Culture and Tourism, Abu Dhabi.
+
+Headline: {item['headline']}
+Source: {item['source']}
+Published: {item['published_date']}
+
+Return JSON:
+{{
+  "relevance_score": <integer 1-10, where 10 is highly relevant to DCT risk>,
+  "mapped_risk_categories": ["Safety","Security",...],
+  "ai_analysis": "<2-3 sentences explaining how this news relates to DCT risks and what action may be needed>"
+}}
+
+Risk categories to choose from: Safety, Security, Financial, Reputational,
+Operational, Compliance, Environmental, Strategic, Crowd Management"""
+
+    try:
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        msg = client.messages.create(
+            model=MODEL_FAST,
+            max_tokens=512,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = msg.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = "\n".join(raw.split("\n")[1:])
+            if raw.endswith("```"):
+                raw = raw[: raw.rfind("```")]
+        result = json.loads(raw)
+
+        score    = int(result.get("relevance_score", 5))
+        cats     = result.get("mapped_risk_categories", [])
+        analysis = result.get("ai_analysis", "")
+
+        conn.execute("""
+            UPDATE news_items
+            SET relevance_score=?, mapped_risk_categories=?, ai_analysis=?
+            WHERE id=?
+        """, (score, json.dumps(cats), analysis, item_id))
+        conn.commit()
+        conn.close()
+        return jsonify(relevance_score=score,
+                       mapped_risk_categories=cats,
+                       ai_analysis=analysis)
+
+    except json.JSONDecodeError as e:
+        conn.close()
+        return jsonify(error=f"JSON parse error: {e}"), 500
+    except TypeError as e:
+        conn.close()
+        return jsonify(error=f"API key error: {e}"), 500
+    except anthropic.AuthenticationError:
+        conn.close()
+        return jsonify(error="Invalid Anthropic API key"), 401
+    except Exception as e:  # noqa: BLE001
+        conn.close()
+        return jsonify(error=f"Unexpected error: {e}"), 500
+
+
+@news_bp.route("/api/news/<int:item_id>/create-risk", methods=["POST"])
+def create_risk_from_news(item_id):
+    conn  = get_db()
+    item  = conn.execute("SELECT * FROM news_items WHERE id=?", (item_id,)).fetchone()
+    if not item:
+        conn.close()
+        return jsonify(error="News item not found"), 404
+    item = dict(item)
+
+    from agents.risk_register_agent import _next_risk_id
+    now     = datetime.utcnow().isoformat()
+    rid_str = _next_risk_id("enterprise", conn)
+    cats    = []
+    try:
+        cats = json.loads(item.get("mapped_risk_categories") or "[]")
+    except (ValueError, TypeError):
+        pass
+    category = cats[0] if cats else "Operational"
+
+    conn.execute("""
+        INSERT INTO risks
+          (risk_id,level,entity_name,category,title,description,
+           likelihood,impact,risk_score,status,source,created_date,updated_date)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+    """, (rid_str, "enterprise", "DCT Enterprise",
+          category,
+          f"News-Triggered: {item['headline'][:80]}",
+          f"Risk identified from news monitoring. {item.get('ai_analysis','')}",
+          3, 3, 9, "Open", "News-Triggered", now, now))
+    conn.execute("UPDATE news_items SET triggered_risk_id=? WHERE id=?", (rid_str, item_id))
+    conn.commit()
+    new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    conn.close()
+    return jsonify(risk_id=rid_str, db_id=new_id), 201
+
+
+@news_bp.route("/api/news/<int:item_id>", methods=["DELETE"])
+def delete_news_item(item_id):
+    conn = get_db()
+    conn.execute("DELETE FROM news_items WHERE id=?", (item_id,))
+    conn.commit()
+    conn.close()
+    return jsonify(deleted=True)

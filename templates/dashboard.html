@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · DCT Risk Intelligence{% endblock %}
+{% block page_title %}Risk Intelligence Dashboard{% endblock %}
+{% block page_sub %}Enterprise-wide risk posture overview · Department of Culture &amp; Tourism{% endblock %}
+
+{% block top_actions %}
+  <button class="btn-primary" onclick="location.href='/risk-register'">&#43; New Risk</button>
+{% endblock %}
+
+{% block content %}
+<!-- Stats Row -->
+<div class="stats-row" id="statsRow">
+  <div class="stat-card"><div class="stat-ico total">&#9632;</div><div class="stat-body"><div class="stat-n" id="sTotal">—</div><div class="stat-l">Total Risks</div></div></div>
+  <div class="stat-card"><div class="stat-ico high">&#9650;</div><div class="stat-body"><div class="stat-n high" id="sHigh">—</div><div class="stat-l">High Risk</div></div></div>
+  <div class="stat-card"><div class="stat-ico medium">&#9632;</div><div class="stat-body"><div class="stat-n medium" id="sMedium">—</div><div class="stat-l">Medium Risk</div></div></div>
+  <div class="stat-card"><div class="stat-ico low">&#9660;</div><div class="stat-body"><div class="stat-n low" id="sLow">—</div><div class="stat-l">Low Risk</div></div></div>
+</div>
+
+<div class="dash-grid">
+  <!-- Level Breakdown -->
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title">&#127961; Risk by Level</span>
+    </div>
+    <div class="card-body" id="levelBreakdown">
+      <p class="empty-msg">Loading…</p>
+    </div>
+  </div>
+
+  <!-- Status Breakdown -->
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title">&#9654; Risk by Status</span>
+    </div>
+    <div class="card-body" id="statusBreakdown">
+      <p class="empty-msg">Loading…</p>
+    </div>
+  </div>
+
+  <!-- Top High Risks -->
+  <div class="card span-2">
+    <div class="card-head">
+      <span class="card-title">&#9888; Top Risks Requiring Attention</span>
+      <a href="/risk-register" class="card-link">View all &rarr;</a>
+    </div>
+    <div class="card-body p0">
+      <table class="data-table" id="topRisksTable">
+        <thead>
+          <tr><th>Risk ID</th><th>Title</th><th>Level</th><th>Category</th><th>Score</th><th>Status</th><th>Owner</th></tr>
+        </thead>
+        <tbody id="topRisksTbody"><tr><td colspan="7" class="empty-msg">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="card">
+    <div class="card-head"><span class="card-title">&#9889; Quick Actions</span></div>
+    <div class="card-body">
+      <div class="quick-actions">
+        <a href="/risk-register" class="qa-btn">
+          <span class="qa-ico">&#128737;</span>
+          <span>Generate Risk Register</span>
+        </a>
+        <a href="/ingestion" class="qa-btn">
+          <span class="qa-ico">&#128196;</span>
+          <span>Upload Document</span>
+        </a>
+        <a href="/news-monitor" class="qa-btn">
+          <span class="qa-ico">&#128240;</span>
+          <span>Check News Alerts</span>
+        </a>
+        <a href="/arc-pack" class="qa-btn">
+          <span class="qa-ico">&#128203;</span>
+          <span>Generate ARC Pack</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Activity -->
+  <div class="card">
+    <div class="card-head"><span class="card-title">&#128337; Recent Risks</span></div>
+    <div class="card-body p0">
+      <ul class="activity-feed" id="activityFeed">
+        <li class="empty-msg">Loading…</li>
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadDashboard() {
+  try {
+    const r = await fetch('/api/risks/stats');
+    const d = await r.json();
+
+    document.getElementById('sTotal').textContent  = d.total;
+    document.getElementById('sHigh').textContent   = d.high;
+    document.getElementById('sMedium').textContent = d.medium;
+    document.getElementById('sLow').textContent    = d.low;
+
+    // Level breakdown
+    const levelLabels = {enterprise:'Enterprise',affiliate:'Affiliate',department:'Department',event:'Event'};
+    const lb = document.getElementById('levelBreakdown');
+    lb.innerHTML = (d.by_level||[]).map(l =>
+      `<div class="bar-row">
+        <span class="bar-label">${levelLabels[l.level]||l.level}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100,l.c/(d.total||1)*100)}%"></div></div>
+        <span class="bar-count">${l.c}</span>
+      </div>`
+    ).join('') || '<p class="empty-msg">No data</p>';
+
+    // Status breakdown
+    const statusColors = {Open:'#ef4444',Mitigating:'#f59e0b',Accepted:'#6366f1',Closed:'#22c55e'};
+    const sb = document.getElementById('statusBreakdown');
+    sb.innerHTML = (d.by_status||[]).map(s =>
+      `<div class="bar-row">
+        <span class="bar-label">${s.status}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100,s.c/(d.total||1)*100)}%;background:${statusColors[s.status]||'#1e6fb5'}"></div></div>
+        <span class="bar-count">${s.c}</span>
+      </div>`
+    ).join('') || '<p class="empty-msg">No data</p>';
+
+    // Top risks table
+    const tbody = document.getElementById('topRisksTbody');
+    const allRisks = await fetch('/api/risks').then(r=>r.json());
+    const top = allRisks.filter(r=>r.risk_score>=13).slice(0,8);
+    if (top.length) {
+      tbody.innerHTML = top.map(r => {
+        const lv = scoreLevel(r.risk_score);
+        return `<tr>
+          <td><span class="risk-id-tag">${esc(r.risk_id)}</span></td>
+          <td>${esc(r.title)}</td>
+          <td><span class="level-chip">${r.level||''}</span></td>
+          <td>${esc(r.category)}</td>
+          <td><span class="score-bubble ${lv}">${r.risk_score}</span></td>
+          <td><span class="status-badge ${(r.status||'').toLowerCase().replace(' ','-')}">${esc(r.status)}</span></td>
+          <td class="muted">${esc(r.owner)}</td>
+        </tr>`;
+      }).join('');
+    } else {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">No high risks · all clear</td></tr>';
+    }
+
+    // Recent activity
+    const feed = document.getElementById('activityFeed');
+    const recent = (d.recent||[]).slice(0,5);
+    if (recent.length) {
+      feed.innerHTML = recent.map(r => {
+        const lv = scoreLevel(r.risk_score);
+        return `<li class="activity-item">
+          <span class="act-dot ${lv}"></span>
+          <div>
+            <div class="act-title">${esc(r.title)}</div>
+            <div class="act-meta">${esc(r.risk_id)} · ${r.entity_name||''} · Score ${r.risk_score}</div>
+          </div>
+        </li>`;
+      }).join('');
+    } else {
+      feed.innerHTML = '<li class="empty-msg">No risks yet — generate your first register</li>';
+    }
+
+  } catch(e) {
+    console.error(e);
+  }
+}
+loadDashboard();
+</script>
+{% endblock %}

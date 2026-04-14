@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Document Ingestion · DCT Risk Intelligence{% endblock %}
+{% block page_title %}Document Ingestion{% endblock %}
+{% block page_sub %}Upload risk registers, policies, and incident reports for AI-powered risk extraction{% endblock %}
+
+{% block content %}
+<!-- Upload Card -->
+<div class="card">
+  <div class="card-head"><span class="card-title">&#128196; Upload Document</span></div>
+  <div class="card-body">
+    <div class="upload-zone" id="uploadZone"
+         ondragover="event.preventDefault();this.classList.add('drag-over')"
+         ondragleave="this.classList.remove('drag-over')"
+         ondrop="handleDrop(event)">
+      <div class="upload-ico">&#8593;</div>
+      <p class="upload-msg">Drag &amp; drop a file or <label for="fileInput" class="upload-link">browse</label></p>
+      <p class="upload-hint">PDF · DOCX · XLSX · CSV · TXT &nbsp;|&nbsp; Max 16 MB</p>
+      <input type="file" id="fileInput" accept=".pdf,.docx,.xlsx,.csv,.txt" style="display:none" onchange="handleFile(this.files[0])">
+    </div>
+    <div id="uploadForm" style="display:none;margin-top:16px">
+      <div class="form-row" style="align-items:flex-end">
+        <div class="form-group flex-1">
+          <label>Document Type</label>
+          <select id="docType">
+            <option value="risk_register">Risk Register</option>
+            <option value="policy">Policy Document</option>
+            <option value="procedure">Procedure</option>
+            <option value="lesson_learned">Lesson Learned</option>
+            <option value="incident_report">Incident Report</option>
+          </select>
+        </div>
+        <div class="form-group flex-2">
+          <label>Selected File</label>
+          <div class="file-chip" id="fileChip">—</div>
+        </div>
+        <div class="form-group">
+          <button class="btn-primary" onclick="uploadFile()">&#8593; Upload</button>
+          <button class="btn-ghost" onclick="cancelUpload()">Cancel</button>
+        </div>
+      </div>
+      <div id="uploadProgress" style="display:none" class="progress-row">
+        <div class="spinner sm"></div><span>Uploading…</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Documents List -->
+<div class="card mt16">
+  <div class="card-head">
+    <span class="card-title" id="docCount">Ingested Documents</span>
+    <button class="btn-ghost btn-sm" onclick="loadDocuments()">&#8635; Refresh</button>
+  </div>
+  <div class="card-body p0">
+    <table class="data-table">
+      <thead>
+        <tr><th>Filename</th><th>Type</th><th>Uploaded</th><th>Status</th><th>Risks Extracted</th><th>Summary</th><th>Actions</th></tr>
+      </thead>
+      <tbody id="docTbody">
+        <tr><td colspan="7" class="empty-msg">Loading documents…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Progress Modal -->
+<div class="modal-bg" id="processModal">
+  <div class="modal" style="max-width:420px;text-align:center">
+    <div class="modal-body" style="padding:40px">
+      <div class="spinner lg" style="margin:0 auto 20px"></div>
+      <h3>Processing Document</h3>
+      <p class="muted" id="processMsg">Claude is extracting risks from your document…</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selectedFile = null;
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('uploadZone').classList.remove('drag-over');
+  handleFile(e.dataTransfer.files[0]);
+}
+
+function handleFile(file) {
+  if (!file) return;
+  selectedFile = file;
+  document.getElementById('fileChip').textContent = `${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`;
+  document.getElementById('uploadForm').style.display = 'block';
+}
+
+function cancelUpload() {
+  selectedFile = null;
+  document.getElementById('uploadForm').style.display = 'none';
+  document.getElementById('fileInput').value = '';
+}
+
+async function uploadFile() {
+  if (!selectedFile) return;
+  const docType = document.getElementById('docType').value;
+  const fd = new FormData();
+  fd.append('file', selectedFile);
+  fd.append('doc_type', docType);
+
+  document.getElementById('uploadProgress').style.display = 'flex';
+  document.querySelector('#uploadForm .btn-primary').disabled = true;
+
+  try {
+    const resp = await fetch('/api/ingest', {method:'POST', body:fd});
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    cancelUpload();
+    showToast(`Uploaded: ${data.filename}`, 'success');
+    loadDocuments();
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally {
+    document.getElementById('uploadProgress').style.display = 'none';
+    const btn = document.querySelector('#uploadForm .btn-primary');
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function loadDocuments() {
+  const tbody = document.getElementById('docTbody');
+  tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">Loading…</td></tr>';
+  try {
+    const docs = await fetch('/api/documents').then(r=>r.json());
+    document.getElementById('docCount').textContent = `${docs.length} Document${docs.length!==1?'s':''}`;
+    if (!docs.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">No documents yet — upload your first file.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = docs.map(d => {
+      const processed = d.processed ? '✅ Processed' : '⏳ Pending';
+      const typeLabel = {risk_register:'Risk Register',policy:'Policy',procedure:'Procedure',lesson_learned:'Lesson Learned',incident_report:'Incident Report'}[d.doc_type]||d.doc_type;
+      const dateStr = d.upload_date ? new Date(d.upload_date).toLocaleDateString('en-GB') : '—';
+      const summary = d.summary ? d.summary.slice(0,80) + (d.summary.length>80?'…':'') : '—';
+      return `<tr>
+        <td class="bold">${esc(d.filename)}</td>
+        <td><span class="cat-chip">${esc(typeLabel)}</span></td>
+        <td class="muted small">${dateStr}</td>
+        <td>${processed}</td>
+        <td class="num">${d.extracted_risks_count||0}</td>
+        <td class="muted small">${esc(summary)}</td>
+        <td>
+          <div class="row-actions">
+            ${!d.processed ? `<button class="btn-sm btn-primary" onclick="processDoc(${d.id})">&#9889; Extract Risks</button>` : ''}
+            <button class="btn-icon danger" onclick="deleteDoc(${d.id})">&#10006;</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-msg error">${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function processDoc(id) {
+  document.getElementById('processModal').classList.add('open');
+  try {
+    const resp = await fetch(`/api/documents/${id}/process`, {method:'POST'});
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    showToast(`Extracted ${data.risks_extracted} risks`, 'success');
+    loadDocuments();
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally {
+    document.getElementById('processModal').classList.remove('open');
+  }
+}
+
+async function deleteDoc(id) {
+  if (!confirm('Delete this document?')) return;
+  await fetch(`/api/documents/${id}`, {method:'DELETE'});
+  showToast('Document deleted', 'success');
+  loadDocuments();
+}
+
+loadDocuments();
+</script>
+{% endblock %}
