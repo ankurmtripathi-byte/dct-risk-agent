@@ -4,13 +4,14 @@
 {% block page_sub %}Real-time news monitoring mapped to DCT risk categories{% endblock %}
 
 {% block top_actions %}
+  <button class="btn-outline" onclick="fetchCurated()">&#11088; Today's Curated Stories</button>
   <button class="btn-primary" onclick="fetchNews()">&#128240; Fetch Latest News</button>
 {% endblock %}
 
 {% block content %}
 <div class="card" id="fetchCard" style="display:none">
   <div class="card-body">
-    <div class="spinner-row"><div class="spinner"></div><span>Fetching news from NewsAPI…</span></div>
+    <div class="spinner-row"><div class="spinner"></div><span id="fetchMsg">Fetching news…</span></div>
   </div>
 </div>
 
@@ -95,9 +96,26 @@ function renderNews(items) {
   }).join('');
 }
 
+async function fetchCurated() {
+  document.getElementById('fetchMsg').textContent = 'Fetching today\'s curated stories…';
+  document.getElementById('fetchCard').style.display = 'block';
+  try {
+    const resp = await fetch('/api/news/curated', {method: 'POST'});
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    showToast(`Curated: ${data.fetched} stories, ${data.new} new`, 'success');
+    loadNews();
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally {
+    document.getElementById('fetchCard').style.display = 'none';
+  }
+}
+
 async function fetchNews() {
   const query    = document.getElementById('newsQuery').value.trim();
   const pageSize = document.getElementById('newsPageSize').value;
+  document.getElementById('fetchMsg').textContent = 'Fetching news from NewsAPI…';
   document.getElementById('fetchCard').style.display = 'block';
   try {
     const body = {page_size: parseInt(pageSize)};

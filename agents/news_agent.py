@@ -10,7 +10,8 @@ from database import get_db
 
 news_bp = Blueprint("news", __name__)
 
-NEWSAPI_URL = "https://newsapi.org/v2/everything"
+NEWSAPI_URL    = "https://newsapi.org/v2/everything"
+CURATED_URL    = "https://actually-relevant-api.onrender.com/api/stories"
 DCT_QUERY   = (
     "(\"Abu Dhabi\" OR UAE OR tourism OR \"cultural event\") AND "
     "(risk OR safety OR security OR incident OR disruption OR "
@@ -86,6 +87,84 @@ def fetch_news():
     conn.commit()
     conn.close()
     return jsonify(fetched=len(articles), new=saved)
+
+
+@news_bp.route("/api/news/curated", methods=["POST"])
+def fetch_curated():
+    """Fetch today's curated stories from actually-relevant-api.onrender.com."""
+    try:
+        resp = requests.get(CURATED_URL, timeout=15)
+        resp.raise_for_status()
+        payload = resp.json()
+    except requests.RequestException as e:
+        return jsonify(error=f"Curated stories request failed: {e}"), 502
+    except ValueError as e:
+        return jsonify(error=f"Invalid JSON from curated API: {e}"), 502
+
+    # Normalise: accept a top-level list OR an object with a list under any key
+    stories: list = []
+    if isinstance(payload, list):
+        stories = payload
+    elif isinstance(payload, dict):
+        # Try common wrapper keys; fall back to first list value found
+        for key in ("stories", "articles", "items", "data", "results"):
+            if isinstance(payload.get(key), list):
+                stories = payload[key]
+                break
+        if not stories:
+            for val in payload.values():
+                if isinstance(val, list):
+                    stories = val
+                    break
+
+    now  = datetime.utcnow().isoformat()
+    conn = get_db()
+    saved = 0
+
+    for s in stories:
+        if not isinstance(s, dict):
+            continue
+
+        # Accept multiple field-name conventions
+        headline = (
+            s.get("title") or s.get("headline") or
+            s.get("name")  or s.get("story")    or ""
+        ).strip()
+        url = (s.get("url") or s.get("link") or s.get("href") or "").strip()
+        source = (
+            s.get("source") or s.get("publisher") or
+            s.get("outlet") or "actually-relevant-api"
+        )
+        if isinstance(source, dict):
+            source = source.get("name") or source.get("id") or "actually-relevant-api"
+        published = (
+            s.get("publishedAt") or s.get("published_at") or
+            s.get("date")        or s.get("created_at")   or ""
+        )
+
+        if not headline:
+            continue
+
+        # Deduplicate by URL if present, else by headline
+        dup_check = (
+            conn.execute("SELECT 1 FROM news_items WHERE url=?", (url,)).fetchone()
+            if url else
+            conn.execute("SELECT 1 FROM news_items WHERE headline=?", (headline,)).fetchone()
+        )
+        if dup_check:
+            continue
+
+        conn.execute("""
+            INSERT INTO news_items
+              (headline, source, url, published_date, fetched_date,
+               relevance_score, mapped_risk_categories, ai_analysis)
+            VALUES (?,?,?,?,?,?,?,?)
+        """, (headline, str(source), url, published, now, 0, "[]", ""))
+        saved += 1
+
+    conn.commit()
+    conn.close()
+    return jsonify(fetched=len(stories), new=saved)
 
 
 @news_bp.route("/api/news/<int:item_id>/analyse", methods=["POST"])
