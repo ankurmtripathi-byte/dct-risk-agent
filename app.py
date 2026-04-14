@@ -11,7 +11,6 @@ except ImportError:
     pass
 
 app = Flask(__name__)
-client = anthropic.Anthropic()
 
 RISK_SCHEMA = {
     "type": "object",
@@ -116,7 +115,12 @@ For each risk:
 - mitigation_action: 2–3 sentences of specific, actionable mitigation measures
 - owner:             Specific role/team (e.g. "Event Safety Manager", "DCT Security Directorate")"""
 
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        return jsonify({"error": "ANTHROPIC_API_KEY is not configured on the server."}), 500
+
     try:
+        client = anthropic.Anthropic(api_key=api_key)
         with client.messages.stream(
             model="claude-opus-4-6",
             max_tokens=8000,
