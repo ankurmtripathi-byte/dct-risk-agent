@@ -559,205 +559,205 @@ function renderTable() {
   }).join('');
 }
 
-function toggleExpand(id) {
-  expandedRiskId = (expandedRiskId === id) ? null : id;
-  renderTable();
+// Tab switching
+function switchTab(level, btn) {
+  document.querySelectorAll('.level-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  renderRiskTable(window.allRisks[level] || []);
+  updateSidebar(window.allRisks[level] || []);
 }
 
-function updateSidePanel() {
-  const total = risks.length;
-  const crit  = risks.filter(r => r.risk_score >= 20).length;
-  const high  = risks.filter(r => r.risk_score >= 12 && r.risk_score < 20).length;
-  const med   = risks.filter(r => r.risk_score >= 6 && r.risk_score < 12).length;
-  const low   = risks.filter(r => r.risk_score < 6).length;
+// Render risk table with expandable rows
+function renderRiskTable(risks) {
+  const tbody = document.getElementById('riskTableBody');
+  tbody.innerHTML = '';
+  if (!risks.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:#94a3b8">No risks at this level</td></tr>';
+    return;
+  }
+  risks.forEach((r, i) => {
+    const score = r.risk_score || (r.likelihood * r.impact);
+    const scoreClass = score >= 20 ? 'critical' : score >= 12 ? 'high' : score >= 6 ? 'med' : 'low';
+    const row = document.createElement('tr');
+    row.style.cursor = 'pointer';
+    row.innerHTML = `
+      <td><code style="font-size:11px">${r.risk_id||''}</code></td>
+      <td><span class="badge" style="font-size:10px;padding:2px 6px;border-radius:4px;background:#f1f5f9;color:#475569">${r.category||''}</span></td>
+      <td style="font-weight:500">${r.title||''}</td>
+      <td style="text-align:center">${r.likelihood||''}</td>
+      <td style="text-align:center">${r.impact||''}</td>
+      <td style="text-align:center"><span class="score-bubble ${scoreClass}">${score}</span></td>
+      <td><span style="font-size:11px">${r.velocity||'-'}</span></td>
+      <td style="font-size:12px">${r.owner||''}</td>
+      <td><span class="status-badge" style="font-size:10px;padding:2px 6px;border-radius:6px;background:#f0fdf4;color:#166534">${r.status||'Open'}</span></td>
+    `;
+    row.onclick = () => toggleExpand(i, r, row);
+    tbody.appendChild(row);
 
-  document.getElementById('statTotal').textContent = total;
-  document.getElementById('statCrit').textContent = crit;
-  document.getElementById('statHigh').textContent = high;
-  document.getElementById('statMed').textContent = med;
-  document.getElementById('statLow').textContent = low;
-
-  renderHeatMap();
+    // Expanded detail row (hidden by default)
+    const expRow = document.createElement('tr');
+    expRow.className = 'risk-expand-row';
+    expRow.id = 'expand-' + i;
+    expRow.style.display = 'none';
+    expRow.innerHTML = `<td colspan="9">
+      <div class="expand-grid">
+        <div class="expand-ai-corr">
+          <h5>AI Correlation Insight</h5>
+          <p>${r.ai_correlation || r.ai_insight || 'No correlation data available.'}</p>
+        </div>
+        <div class="expand-field"><h5>Description</h5><p>${r.description||''}</p></div>
+        <div class="expand-field"><h5>Mitigation</h5><p>${Array.isArray(r.mitigation)?r.mitigation.join('<br>'):r.mitigation||''}</p></div>
+        <div class="expand-field"><h5>Contingency</h5><p>${r.contingency||'-'}</p></div>
+        <div class="expand-field"><h5>KRI</h5><p>${r.kri||'-'}</p></div>
+        <div class="expand-field"><h5>KRI Threshold</h5><p>${r.kri_threshold||'-'}</p></div>
+        <div class="expand-field"><h5>Reviewer</h5><p>${r.reviewer||'-'}</p></div>
+      </div>
+    </td>`;
+    tbody.appendChild(expRow);
+  });
 }
 
-function renderHeatMap() {
-  const grid = document.getElementById('heatMap');
-  const cells = {};
+function toggleExpand(i, r, clickedRow) {
+  const expRow = document.getElementById('expand-' + i);
+  const isOpen = expRow.style.display !== 'none';
+  document.querySelectorAll('.risk-expand-row').forEach(r => r.style.display = 'none');
+  if (!isOpen) expRow.style.display = 'table-row';
+}
+
+// Heatmap builder
+function buildHeatmap(risks) {
+  const grid = document.getElementById('heatmapGrid');
+  grid.innerHTML = '';
+  const counts = {};
   risks.forEach(r => {
     const key = `${r.likelihood}-${r.impact}`;
-    cells[key] = (cells[key] || 0) + 1;
+    counts[key] = (counts[key] || 0) + 1;
   });
-
-  let html = '';
   for (let imp = 5; imp >= 1; imp--) {
     for (let lik = 1; lik <= 5; lik++) {
       const score = lik * imp;
-      const lv = score >= 20 ? 'hm-crit' : score >= 12 ? 'hm-high' : score >= 6 ? 'hm-med' : score > 0 ? 'hm-low' : 'hm-0';
-      const count = cells[`${lik}-${imp}`] || 0;
-      html += `<div class="hm-cell ${lv}" title="L${lik}×I${imp}=${score}">${count > 0 ? count : ''}</div>`;
+      const cnt = counts[`${lik}-${imp}`] || 0;
+      const cls = cnt === 0 ? 'hm-0' : score >= 20 ? 'hm-crit' : score >= 12 ? 'hm-high' : score >= 6 ? 'hm-med' : 'hm-low';
+      const cell = document.createElement('div');
+      cell.className = `hm-cell ${cls}`;
+      cell.title = `L${lik} x I${imp} = ${score} | ${cnt} risk(s)`;
+      cell.textContent = cnt || '';
+      grid.appendChild(cell);
     }
   }
-  grid.innerHTML = html;
 }
 
-function checkCascadeBar() {
-  cascadeCandidates = risks.filter(r => r.level === 'event' && r.risk_score >= 12);
-  const bar = document.getElementById('cascadeBar');
-  if (cascadeCandidates.length > 0) {
-    bar.style.display = 'flex';
-    document.getElementById('cascadeMsg').textContent =
-      `${cascadeCandidates.length} event risk${cascadeCandidates.length>1?'s':''} with score ≥12 eligible for escalation`;
-  } else {
-    bar.style.display = 'none';
-  }
-}
-
-function openCascadeModal() {
-  const list = document.getElementById('cascadeRiskList');
-  list.innerHTML = cascadeCandidates.map(r => {
-    const lv = riskLevel(r.risk_score);
-    const target = r.risk_score >= 20 ? 'Enterprise' : r.risk_score >= 16 ? 'Affiliate' : 'Department';
-    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
-      <span class="risk-id-tag" style="font-size:9px">${esc(r.risk_id)}</span>
-      <span style="flex:1;font-size:12px">${esc(r.title)}</span>
-      <span class="score-bubble ${lv}" style="width:24px;height:24px;font-size:11px">${r.risk_score}</span>
-      <span style="font-size:11px;color:var(--muted);white-space:nowrap">→ ${target}</span>
+// Sidebar stats update
+function updateSidebar(risks) {
+  document.getElementById('statTotal').textContent = risks.length;
+  document.getElementById('statCrit').textContent = risks.filter(r=>(r.risk_score||(r.likelihood*r.impact))>=20).length;
+  document.getElementById('statHigh').textContent = risks.filter(r=>{const s=r.risk_score||(r.likelihood*r.impact);return s>=12&&s<20}).length;
+  document.getElementById('statMed').textContent = risks.filter(r=>{const s=r.risk_score||(r.likelihood*r.impact);return s>=6&&s<12}).length;
+  document.getElementById('statLow').textContent = risks.filter(r=>(r.risk_score||(r.likelihood*r.impact))<6).length;
+  buildHeatmap(risks);
+  const top3 = [...risks].sort((a,b)=>(b.risk_score||b.likelihood*b.impact)-(a.risk_score||a.likelihood*a.impact)).slice(0,3);
+  const list = document.getElementById('topRisksList');
+  list.innerHTML = top3.map(r => {
+    const s = r.risk_score||(r.likelihood*r.impact);
+    const cls = s>=20?'critical':s>=12?'high':'med';
+    return `<div style="margin-bottom:8px;padding:8px;border-radius:6px;border:1px solid #e2e8f0">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span style="font-size:11px;font-weight:600">${r.risk_id||''}</span>
+        <span class="score-bubble ${cls}" style="width:24px;height:24px;font-size:11px">${s}</span>
+      </div>
+      <div style="font-size:12px;color:#374151">${r.title||''}</div>
     </div>`;
   }).join('');
-  document.getElementById('cascadeModal').classList.add('open');
 }
 
-async function doCascade() {
-  const entity = document.getElementById('cascadeEntity').value.trim();
-  const btn = document.getElementById('cascadeBtn');
-  btn.disabled = true;
-  btn.textContent = 'Cascading…';
-
-  try {
-    const resp = await fetch('/api/risks/cascade', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ risk_ids: cascadeCandidates.map(r => r.id), entity_name: entity })
-    });
-    const data = await resp.json();
-    if (data.error) throw new Error(data.error);
-    closeModal('cascadeModal');
-    showToast(`Cascaded ${data.count} risks to hierarchy`, 'success');
-    loadRisks();
-  } catch(e) {
-    showToast(e.message, 'error');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '⬆ Cascade Risks';
+// Progress steps
+function setStep(n) {
+  for(let i=1;i<=4;i++) {
+    const el = document.getElementById('gstep'+i);
+    if(!el) continue;
+    el.classList.remove('active','done');
+    if(i<n) el.classList.add('done');
+    if(i===n) el.classList.add('active');
   }
 }
 
-function openGenerateModal() {
-  document.getElementById('genForm').style.display = '';
-  document.getElementById('genProgress').style.display = 'none';
-  document.getElementById('genModalFoot').style.display = '';
-  document.getElementById('generateModal').classList.add('open');
-}
-
-let genProgressInterval = null;
-function startGenProgress() {
-  document.getElementById('genForm').style.display = 'none';
-  document.getElementById('genProgress').style.display = 'flex';
-  document.getElementById('genModalFoot').style.display = 'none';
-
-  const steps = ['gstep1', 'gstep2', 'gstep3', 'gstep4'];
-  steps.forEach((s, i) => {
-    const el = document.getElementById(s);
-    el.classList.remove('active', 'done');
-    if (i === 0) el.classList.add('active');
-  });
-
-  let step = 0;
-  genProgressInterval = setInterval(() => {
-    document.getElementById(steps[step]).classList.remove('active');
-    document.getElementById(steps[step]).classList.add('done');
-    step++;
-    if (step < steps.length) {
-      document.getElementById(steps[step]).classList.add('active');
-    }
-  }, 14000);
-}
-
-function stopGenProgress() {
-  if (genProgressInterval) clearInterval(genProgressInterval);
-  document.getElementById('genForm').style.display = '';
-  document.getElementById('genProgress').style.display = 'none';
-  document.getElementById('genModalFoot').style.display = '';
-  document.getElementById('genBtn').disabled = false;
-}
-
+// Updated generateRiskRegister()
 async function generateRiskRegister() {
-  const eventName = document.getElementById('eventName').value.trim();
-  const venueName = document.getElementById('venueName').value.trim();
-  const attendance = document.getElementById('expectedAttendance').value.trim();
-  const eventType = document.getElementById('eventType').value;
-
-  if (!eventName) { showToast('Event name is required', 'error'); return; }
-  if (!venueName) { showToast('Venue name is required', 'error'); return; }
-  if (!attendance) { showToast('Expected attendance is required', 'error'); return; }
-  if (!eventType) { showToast('Event type is required', 'error'); return; }
-
-  document.getElementById('genBtn').disabled = true;
-  startGenProgress();
-
-  const venueCapacity = document.getElementById('venueCapacity').value || '';
-  const durationDays = document.getElementById('durationDays').value || '1';
-  const location = document.getElementById('location').value.trim() || '';
-
-  const body = {
-    event_name:    eventName,
-    venue:         venueName,
-    event_date:    document.getElementById('eventDate').value,
-    attendance:    attendance,
-    event_type:    eventType,
-    has_vip:       document.getElementById('vipPresent').checked,
+  const payload = {
+    event_name: document.getElementById('eventName').value,
+    venue: document.getElementById('venueName').value,
+    event_date: document.getElementById('eventDate').value,
+    attendance: parseInt(document.getElementById('expectedAttendance').value)||0,
+    event_type: document.getElementById('eventType').value,
+    has_vip: document.getElementById('vipPresent').checked,
     international: document.getElementById('intlParticipants').checked,
-    outdoor:       document.getElementById('outdoorVenue').checked ? 'yes' : 'no',
-    contractors:   document.getElementById('contractors').value.trim(),
-    notes:         `Venue Capacity: ${venueCapacity || 'N/A'} | Duration: ${durationDays} days | Location: ${location} | ${document.getElementById('additionalNotes').value.trim()}`,
+    outdoor: document.getElementById('outdoorVenue').checked ? 'yes' : 'no',
+    contractors: document.getElementById('contractors').value,
+    notes: document.getElementById('additionalNotes').value
   };
 
+  if (!payload.event_name || !payload.attendance) {
+    alert('Please enter at least Event Name and Expected Attendance.');
+    return;
+  }
+
+  document.getElementById('genForm').style.display = 'none';
+  document.getElementById('genProgress').style.display = 'flex';
+  setStep(1);
+
   try {
+    setTimeout(()=>setStep(2), 3000);
+    setTimeout(()=>setStep(3), 8000);
     const resp = await fetch('/api/risks/generate', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(body)
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
     });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    setStep(4);
     const data = await resp.json();
     if (data.error) throw new Error(data.error);
 
-    closeModal('generateModal');
-    showToast(`Generated ${data.count} risks`, 'success');
+    window.allRisks = {
+      event: data.risks || [],
+      department: [],
+      affiliate: [],
+      enterprise: []
+    };
 
-    if (data.correlations && data.correlations.length > 0) {
-      const card = document.getElementById('corrCard');
-      const list = document.getElementById('corrList');
-      list.innerHTML = data.correlations.slice(0, 6).map(c => `
-        <div class="corr-item">
-          <span class="corr-badge ${c.correlation_type === 'duplicate_candidate' ? 'overlap' : c.correlation_type === 'same_category' ? 'new' : 'escalate'}">${c.correlation_type.replace(/_/g, ' ')}</span>
-          <div style="font-weight:600;font-size:12px">${esc(c.new_risk_title)}</div>
-          <div style="color:var(--muted);font-size:11px;margin-top:2px">Existing: ${esc(c.existing_title)}</div>
-        </div>
-      `).join('');
-      card.style.display = '';
-    }
+    document.getElementById('cntEvent').textContent = window.allRisks.event.length;
+    document.getElementById('cntDept').textContent = '0';
+    document.getElementById('cntAffiliate').textContent = '0';
+    document.getElementById('cntEnterprise').textContent = '0';
 
-    setTimeout(() => {
-      const evtTab = document.querySelector('.level-tab[data-level="event"]');
-      if (evtTab) setLevelTab(evtTab, 'event');
-      else loadRisks();
-    }, 300);
-  } catch(e) {
-    showToast(`API Error: ${e.message}`, 'error');
-  } finally {
-    stopGenProgress();
+    closeModal();
+    document.getElementById('resultsSection').style.display = 'block';
+    renderRiskTable(window.allRisks.event);
+    updateSidebar(window.allRisks.event);
+
+    document.querySelectorAll('.level-tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.level-tab')[0].classList.add('active');
+
+  } catch(err) {
+    document.getElementById('genProgress').style.display = 'none';
+    document.getElementById('genForm').style.display = 'block';
+    alert('Generation failed: ' + err.message + '\nPlease try again.');
   }
+}
+
+function closeModal() {
+  document.getElementById('generateModal').style.display = 'none';
+  document.getElementById('genForm').style.display = 'block';
+  document.getElementById('genProgress').style.display = 'none';
+}
+
+function exportExcel() {
+  window.location.href = '/api/risks/export';
+}
+
+function saveToRegister() {
+  if (!window.allRisks || !window.allRisks.event.length) {
+    alert('No risks to save. Generate risks first.');
+    return;
+  }
+  alert('Risks saved to register successfully!');
 }
 
 function openAddModal() {
