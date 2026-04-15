@@ -607,3 +607,93 @@ textarea { resize: vertical; }
   .main-wrap { margin-left: 0 !important; }
   .card { box-shadow: none; border: 1px solid #ccc; }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   Risk Register – New Components (Tabs, Heat Map, etc.)
+═══════════════════════════════════════════════════════════ */
+
+/* ── Level Tabs ─────────────────────────────────────────────── */
+.level-tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+.level-tab {
+  padding: 8px 20px; border-radius: 6px 6px 0 0;
+  border: 1px solid var(--border); background: #f8fafc;
+  cursor: pointer; font-size: 13px; font-weight: 500;
+  color: var(--muted); transition: all 0.2s;
+}
+.level-tab.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+.level-tab:hover:not(.active) { background: var(--border); }
+
+/* ── Two-panel layout ───────────────────────────────────────── */
+.rr-layout { display: flex; gap: 20px; align-items: flex-start; }
+.rr-main { flex: 1; min-width: 0; }
+.rr-sidebar { width: 280px; flex-shrink: 0; display: flex; flex-direction: column; gap: 16px; position: sticky; top: 72px; }
+
+/* ── Sidebar stat cards ───────────────────────────────────────── */
+.side-stats { background: var(--surface); border-radius: 10px; border: 1px solid var(--border); padding: 16px; }
+.side-stat { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--bg); }
+.side-stat:last-child { border-bottom: none; }
+.side-stat-label { font-size: 12px; color: var(--muted); }
+.side-stat-value { font-size: 18px; font-weight: 700; color: var(--navy); }
+.side-stat-value.critical { color: var(--dark-red); }
+.side-stat-value.high { color: var(--red); }
+.side-stat-value.medium { color: var(--amber); }
+.side-stat-value.low { color: var(--green); }
+
+/* ── Heat Map ───────────────────────────────────────────────── */
+.hm-wrap { background: var(--surface); border-radius: 10px; border: 1px solid var(--border); padding: 16px; }
+.hm-wrap h4 { font-size: 13px; font-weight: 600; color: var(--navy); margin: 0 0 12px; }
+.hm-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; }
+.hm-cell { aspect-ratio: 1; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; cursor: pointer; transition: transform 0.1s; }
+.hm-cell:hover { transform: scale(1.1); }
+.hm-cell.hm-0 { background: var(--border); color: var(--muted); }
+.hm-cell.hm-low { background: #dcfce7; color: #166534; }
+.hm-cell.hm-med { background: #fef9c3; color: #854d0e; }
+.hm-cell.hm-high { background: #fee2e2; color: #991b1b; }
+.hm-cell.hm-crit { background: var(--dark-red); color: #fef2f2; }
+.hm-legend { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.hm-legend span { font-size: 10px; display: flex; align-items: center; gap: 3px; color: var(--muted); }
+.hm-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+/* ── Progress indicator ───────────────────────────────────────── */
+.gen-progress { display: flex; gap: 0; margin-bottom: 20px; }
+.gen-step { flex: 1; text-align: center; font-size: 11px; padding: 8px 4px; border-bottom: 3px solid var(--border); color: var(--muted); transition: all 0.3s; }
+.gen-step.active { color: var(--blue); border-bottom-color: var(--blue); font-weight: 600; }
+.gen-step.done { color: var(--green); border-bottom-color: var(--green); }
+
+/* ── Toggle switch ───────────────────────────────────────────── */
+.toggle-switch { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+.toggle-switch input[type="checkbox"] { width: 36px; height: 20px; appearance: none; background: var(--border); border-radius: 10px; cursor: pointer; transition: background 0.2s; position: relative; }
+.toggle-switch input[type="checkbox"]:checked { background: var(--blue); }
+.toggle-switch input[type="checkbox"]::after { content: ''; position: absolute; width: 16px; height: 16px; background: #fff; border-radius: 50%; top: 2px; left: 2px; transition: left 0.2s; }
+.toggle-switch input[type="checkbox"]:checked::after { left: 18px; }
+.toggle-switch label { font-size: 13px; color: var(--text); cursor: pointer; }
+
+/* ── Expandable rows ─────────────────────────────────────────── */
+.risk-expand-row { background: var(--bg); border-top: none; }
+.risk-expand-row td { padding: 16px 20px; }
+.expand-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.expand-field h5 { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; }
+.expand-field p { font-size: 13px; color: var(--text); margin: 0; line-height: 1.5; }
+.expand-ai-corr { grid-column: 1 / -1; background: var(--blue-pale); border-left: 3px solid var(--blue); border-radius: 0 6px 6px 0; padding: 12px 16px; }
+.expand-ai-corr h5 { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--blue); margin: 0 0 6px; }
+.expand-ai-corr p { font-size: 13px; color: var(--blue); margin: 0; line-height: 1.6; }
+
+/* ── Score bubble (add critical) ─────────────────────────────── */
+.score-bubble { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 6px; font-weight: 700; font-size: 13px; }
+.score-bubble.low { background: #dcfce7; color: #166534; }
+.score-bubble.medium { background: #fef9c3; color: #854d0e; }
+.score-bubble.high { background: #fee2e2; color: #991b1b; }
+.score-bubble.critical { background: var(--dark-red); color: #fef2f2; }
+
+/* ── Cascade bar ─────────────────────────────────────────────── */
+.cascade-bar { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.cascade-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text); }
+.cascade-arrow { color: var(--amber); font-size: 16px; }
+.cascade-badge { background: var(--blue); color: #fff; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
+
+/* ── Correlation items ───────────────────────────────────────── */
+.corr-item { padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 8px; font-size: 12px; }
+.corr-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; margin-bottom: 4px; }
+.corr-badge.overlap { background: #fef9c3; color: #854d0e; }
+.corr-badge.new { background: #dcfce7; color: #166534; }
+.corr-badge.escalate { background: #fee2e2; color: #991b1b; }

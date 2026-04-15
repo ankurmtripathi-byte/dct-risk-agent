@@ -9,8 +9,8 @@ except ImportError:
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 NEWSAPI_KEY       = os.environ.get("NEWSAPI_KEY", "")
 
-MODEL_ANALYSIS = "claude-opus-4-5"
-MODEL_FAST     = "claude-haiku-4-5-20251001"
+MODEL_ANALYSIS = "claude-opus-4-6"
+MODEL_FAST     = "claude-haiku-4-5"
 
 _base     = os.path.dirname(os.path.abspath(__file__))
 _on_vercel = bool(os.environ.get("VERCEL") or os.environ.get("VERCEL_ENV"))
