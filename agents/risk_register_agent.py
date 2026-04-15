@@ -79,141 +79,102 @@ def generate_event_risk_register(event_data: dict) -> dict:
     contractors   = event_data.get("contractors", "")
     notes         = event_data.get("notes", "")
 
-    # ── STAGE 1: Context Intelligence (Haiku — fast) ──────────────────────────
-    stage1_prompt = f"""You are a DCT (Department of Culture and Tourism, Abu Dhabi) event risk intelligence analyst.
-
-Analyse this event and return concise risk intelligence as a JSON object.
-Return ONLY valid JSON with no markdown fences or preamble.
-
-Event: {event_name}
-Venue: {venue}
-Date: {event_date}
-Attendance: {attendance}
-Type: {event_type}
-International Guests: {international}
-VIP / State Protocol: {has_vip}
-Outdoor Elements: {outdoor}
-Contractors: {contractors or "Standard vendors"}
-Notes: {notes or "None"}
-
-Return this exact structure:
-{{
-  "venue_risk_factors": "<specific physical, access, and capacity risks for this venue>",
-  "seasonal_context": "<UAE weather, humidity, dust storms, Ramadan/Eid proximity, National Day>",
-  "vip_protocol_requirements": "<ADNOC protocol, police escort, press exclusion zones, UAE VIP security standards>",
-  "crowd_dynamics": "<demographics, cultural sensitivities, F&B rules, queuing behaviour>",
-  "regulatory_landscape": "<DCT permit conditions, ADCD safety codes, TDIC rules, noise ordinance>",
-  "cross_risk_correlations": "<specific domino sequences e.g. heat stroke -> ambulance delay -> bad press>",
-  "historical_precedents": "<relevant incidents at similar Abu Dhabi events in last 5 years>",
-  "contractor_risks": "<F&B vendors, AV suppliers, security contractors, temporary structures>",
-  "media_reputational_context": "<international media presence, social media amplification, government sensitivity>",
-  "mitigation_benchmark": "<ISO 31000 best practices for this event category>"
-}}"""
-
-    stage1_msg = client.messages.create(
+    # ── CALL 1: Context amplifiers (Haiku — fast) ────────────────────────────
+    context_response = client.messages.create(
         model=MODEL_FAST,
-        max_tokens=2048,
-        messages=[{"role": "user", "content": stage1_prompt}]
+        max_tokens=800,
+        messages=[{
+            "role": "user",
+            "content": f"""Analyze this event and list risk amplifiers as JSON only.
+Event: {event_name}, Attendance: {attendance},
+Venue: {venue}, Date: {event_date},
+International: {international},
+VIP: {has_vip}, Outdoor: {outdoor}
+
+Return ONLY valid JSON: {{"amplifiers": ["...", "..."], "correlations": ["...", "..."]}}"""
+        }]
+    )
+    context_text = context_response.content[0].text
+    try:
+        amplifiers = json.loads(_strip_fences(context_text))
+    except Exception:
+        amplifiers = {"amplifiers": [], "correlations": []}
+
+    # ── Shared context string for all risk batches ────────────────────────────
+    context_str = f"""Event: {event_name}
+Venue: {venue} | Attendance: {attendance}
+Date: {event_date} | Type: {event_type}
+International: {international} | VIP: {has_vip} | Outdoor: {outdoor}
+Contractors: {contractors or 'Standard vendors'}
+Risk amplifiers identified: {'; '.join(amplifiers.get('amplifiers', []))}
+Cross-correlations: {'; '.join(amplifiers.get('correlations', []))}"""
+
+    RISK_SCHEMA = """{
+  "risk_id": "EVT-001",
+  "category": "Safety & Security",
+  "title": "Short title",
+  "description": "2 sentences max",
+  "ai_correlation": "One specific sentence linking this risk to the ACTUAL event parameters above — reference real numbers, dates, venues",
+  "likelihood": 3,
+  "impact": 4,
+  "risk_score": 12,
+  "velocity": "Immediate|Short-term|Long-term",
+  "mitigation": "3 specific actions as one string",
+  "contingency": "If mitigation fails, do this",
+  "kri": "Measurable early warning indicator",
+  "kri_threshold": "The number or trigger for escalation",
+  "owner": "DCT role title",
+  "reviewer": "Reviewer role title",
+  "status": "Open"
+}"""
+
+    def call_risks_batch(categories, start_id):
+        """Generate one batch of risks for the given categories."""
+        cat_list = '\n'.join([f'- {c}' for c in categories])
+        response = client.messages.create(
+            model=MODEL_FAST,
+            max_tokens=2000,
+            messages=[{
+                "role": "user",
+                "content": f"""You are a senior risk consultant for DCT Abu Dhabi.
+Generate exactly {len(categories)} risks for these categories:
+{cat_list}
+
+Event context:
+{context_str}
+
+Return ONLY a valid JSON array. Each risk must follow this schema:
+{RISK_SCHEMA}
+
+Number risks starting from EVT-{str(start_id).zfill(3)}.
+The ai_correlation field MUST reference specific numbers from the event context.
+No preamble. No explanation. JSON array only."""
+            }]
+        )
+        text = response.content[0].text.strip()
+        if text.startswith('```'):
+            text = text.split('```')[1]
+            if text.startswith('json'):
+                text = text[4:]
+        return json.loads(text.strip())
+
+    # ── CALLS 2-4: 5 risks each across 3 batches ─────────────────────────────
+    batch1 = call_risks_batch(
+        ["Safety & Security", "Safety & Security", "Operational", "Operational", "Operational"],
+        start_id=1
+    )
+    batch2 = call_risks_batch(
+        ["Reputational", "Reputational", "Financial", "Financial", "Compliance & Regulatory"],
+        start_id=6
+    )
+    batch3 = call_risks_batch(
+        ["Compliance & Regulatory", "Environmental & Health", "Environmental & Health", "Strategic", "Operational"],
+        start_id=11
     )
 
-    raw1 = stage1_msg.content[0].text.strip()
-    try:
-        intelligence = json.loads(_strip_fences(raw1))
-    except json.JSONDecodeError:
-        intelligence = {"context_summary": raw1}
+    all_risks = batch1 + batch2 + batch3
 
-    # ── STAGE 2: Risk Generation (Opus + Adaptive Thinking) ──────────────────
-    stage2_prompt = f"""You are the Risk Director for the Department of Culture and Tourism (DCT), Abu Dhabi.
-
-━━━ EVENT BRIEF ━━━
-Event:        {event_name}
-Venue:        {venue}
-Date:         {event_date}
-Attendance:   {attendance} guests
-Type:         {event_type}
-VIP/State:    {has_vip}
-International:{international}
-Outdoor:      {outdoor}
-Contractors:  {contractors or "Standard vendors"}
-
-━━━ INTELLIGENCE CONTEXT ━━━
-Venue Risks:      {intelligence.get("venue_risk_factors", "")}
-Seasonal:         {intelligence.get("seasonal_context", "")}
-VIP Protocol:     {intelligence.get("vip_protocol_requirements", "")}
-Crowd Dynamics:   {intelligence.get("crowd_dynamics", "")}
-Regulatory:       {intelligence.get("regulatory_landscape", "")}
-Risk Cascades:    {intelligence.get("cross_risk_correlations", "")}
-Precedents:       {intelligence.get("historical_precedents", "")}
-Contractor Risks: {intelligence.get("contractor_risks", "")}
-Media Context:    {intelligence.get("media_reputational_context", "")}
-
-━━━ TASK ━━━
-Generate exactly 15 risks covering ALL 7 categories (at least 2 per category):
-Safety | Security | Operational | Reputational | Compliance | Financial | Environmental
-
-━━━ CRITICAL REQUIREMENT: ai_correlation field ━━━
-Each ai_correlation MUST:
-1. Name at least one OTHER specific risk category from this register
-2. Describe a CONCRETE cascade mechanism — not vague "may impact" language
-3. Include QUANTIFIED escalation where possible (e.g. "likelihood jumps 3->5")
-4. Reference specific DCT/Abu Dhabi context (venue name, regulation, authority)
-5. NEVER write generic text like "this risk may affect other areas"
-
-GOOD example of ai_correlation:
-"A crowd surge at {venue}'s coastal terrace (Safety, score 16) triggers ADCD mandatory
- incident report within 2 hours, elevating Compliance breach likelihood 2->4. Simultaneous
- Al Jazeera/BBC coverage pushes Reputational damage impact 3->5 within 4 hours, requiring
- DCT Communications Director immediate activation — cascading total portfolio risk score
- by an estimated 35% and forcing DCT Events Director escalation."
-
-BAD example (forbidden): "This safety risk may impact other risk areas and requires attention."
-
-Return ONLY valid JSON — no markdown fences, no preamble:
-{{
-  "risks": [
-    {{
-      "category": "Safety|Security|Operational|Reputational|Compliance|Financial|Environmental",
-      "title": "5-8 word specific risk title",
-      "description": "2-3 sentences: specific risk and consequences for this event",
-      "ai_correlation": "Specific cascade insight with mechanism and quantified escalation — never generic",
-      "likelihood": 3,
-      "impact": 3,
-      "velocity": "Immediate|Short-term|Long-term",
-      "mitigation": "2-3 sentences of actionable prevention specific to this event",
-      "contingency": "1-2 sentences: response if risk materialises",
-      "owner": "Specific DCT or event role title",
-      "reviewer": "Oversight role title",
-      "kri": "Measurable Key Risk Indicator",
-      "kri_threshold": "Specific numeric/observable threshold"
-    }}
-  ]
-}}"""
-
-    # Non-streaming call. Use Sonnet for speed + quality.
-    # Fallback to Haiku if Sonnet times out.
-    try:
-        msg = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=6000,
-            messages=[{"role": "user", "content": stage2_prompt}],
-            timeout=50.0,
-        )
-    except Exception:
-        msg = client.messages.create(
-            model=MODEL_FAST,
-            max_tokens=3000,
-            messages=[{"role": "user", "content": stage2_prompt}],
-            timeout=30.0,
-        )
-
-    raw2 = ""
-    for block in msg.content:
-        if block.type == "text":
-            raw2 = block.text.strip()
-            break
-
-    result = json.loads(_strip_fences(raw2))
-    return {"risks": result.get("risks", []), "intelligence": intelligence}
+    return {"risks": all_risks, "amplifiers": amplifiers, "intelligence": amplifiers}
 
 
 def cascade_to_hierarchy(event_risks: list, entity_name: str, conn) -> list:
