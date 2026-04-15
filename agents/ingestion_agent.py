@@ -285,13 +285,142 @@ def classify_document(text_sample):
     Returns: dict {doc_type, confidence, summary, language}
     doc_type options: risk_register, policy, procedure, lesson_learned,
     incident_report, other"""
-    pass
+    sample = text_sample[:2000]
+    try:
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=300,
+            messages=[{"role": "user", "content": f"""Classify this document. Return ONLY valid JSON.
+
+Text sample:
+{sample}
+
+Return exactly:
+{{"doc_type": "risk_register|policy|procedure|lesson_learned|incident_report|other",
+  "confidence": 0-100,
+  "summary": "One sentence describing the document",
+  "language": "EN|AR|mixed"}}"""}]
+        )
+        text = response.content[0].text.strip()
+        if text.startswith('```'):
+            text = text.split('```')[1]
+            if text.startswith('json'): text = text[4:]
+        return json.loads(text.strip())
+    except:
+        return {"doc_type": "other", "confidence": 0,
+                "summary": "Could not classify", "language": "EN"}
 
 
 def extract_structured_data(full_text, doc_type, source_filename):
     """Extract risks or lessons from document based on doc_type.
     Returns: dict {risks: [], lessons: [], policies: [], raw_count: int}"""
-    pass
+    result = {"risks": [], "lessons": [], "policies": [], "raw_count": 0}
+
+    # Truncate to avoid token limits
+    text = full_text[:6000]
+
+    if doc_type in ['risk_register', 'incident_report']:
+        prompt = f"""Extract every risk or issue from this document.
+Source: {source_filename}
+
+Document:
+{text}
+
+Return ONLY a JSON array. Each item:
+{{"title": "short title",
+  "category": "Safety|Operational|Financial|Reputational|Compliance|Strategic|Other",
+  "description": "what the risk is",
+  "likelihood": null or 1-5,
+  "impact": null or 1-5,
+  "mitigation": "any mitigation mentioned or null",
+  "owner": "any owner mentioned or null",
+  "source_doc": "{source_filename}"}}
+
+If no explicit scores found, set likelihood and impact to null.
+Return empty array [] if no risks found. JSON only."""
+
+        try:
+            resp = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=2500,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            raw = resp.content[0].text.strip()
+            if raw.startswith('```'):
+                raw = raw.split('```')[1]
+                if raw.startswith('json'): raw = raw[4:]
+            result["risks"] = json.loads(raw.strip())
+            result["raw_count"] = len(result["risks"])
+        except Exception as e:
+            result["risks"] = []
+
+    elif doc_type == 'lesson_learned':
+        prompt = f"""Extract every lesson learned from this document.
+Source: {source_filename}
+
+Document:
+{text}
+
+Return ONLY a JSON array. Each item:
+{{"event_name": "event or project name",
+  "event_date": "date if mentioned or null",
+  "category": "Safety|Operational|Financial|Reputational|Compliance|Other",
+  "lesson_title": "short title",
+  "what_happened": "what occurred",
+  "root_cause": "root cause if identified",
+  "corrective_action": "what was done",
+  "preventive_action": "what to do next time",
+  "source_doc": "{source_filename}"}}
+
+JSON only."""
+
+        try:
+            resp = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=2000,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            raw = resp.content[0].text.strip()
+            if raw.startswith('```'):
+                raw = raw.split('```')[1]
+                if raw.startswith('json'): raw = raw[4:]
+            result["lessons"] = json.loads(raw.strip())
+            result["raw_count"] = len(result["lessons"])
+        except:
+            result["lessons"] = []
+
+    elif doc_type in ['policy', 'procedure']:
+        prompt = f"""Extract key information from this policy/procedure document.
+Source: {source_filename}
+
+Document:
+{text}
+
+Return ONLY valid JSON:
+{{"policy_name": "name of the policy",
+  "key_requirements": ["requirement 1", "requirement 2"],
+  "compliance_risks": ["risk if not followed 1", "risk 2"],
+  "relevant_roles": ["role 1", "role 2"],
+  "source_doc": "{source_filename}"}}
+
+JSON only."""
+
+        try:
+            resp = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=1000,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            raw = resp.content[0].text.strip()
+            if raw.startswith('```'):
+                raw = raw.split('```')[1]
+                if raw.startswith('json'): raw = raw[4:]
+            result["policies"] = [json.loads(raw.strip())]
+            result["raw_count"] = 1
+        except:
+            result["policies"] = []
+
+    return result
 
 
 def reconcile_with_existing(extracted_items, db_connection):
