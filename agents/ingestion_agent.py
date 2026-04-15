@@ -3,12 +3,16 @@ import json
 import os
 import sqlite3
 from datetime import datetime
+from pathlib import Path
 
 import anthropic
 from flask import Blueprint, jsonify, render_template, request
 
+import config
 from config import ANTHROPIC_API_KEY, DB_PATH, MODEL_ANALYSIS, UPLOAD_FOLDER
 from database import get_db
+
+client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
 
 ingestion_bp = Blueprint("ingestion", __name__)
 
@@ -223,3 +227,37 @@ def delete_document(doc_id):
     conn.commit()
     conn.close()
     return jsonify(deleted=True)
+
+
+# ── Pipeline utility functions (stubs — logic to be implemented) ──────────────
+
+def extract_text(filepath, filetype):
+    """Extract raw text from PDF, DOCX, XLSX, or TXT file.
+    Returns: dict {text, page_count, error}"""
+    pass
+
+
+def classify_document(text_sample):
+    """Send first 2000 chars to Claude Haiku.
+    Returns: dict {doc_type, confidence, summary, language}
+    doc_type options: risk_register, policy, procedure, lesson_learned,
+    incident_report, other"""
+    pass
+
+
+def extract_structured_data(full_text, doc_type, source_filename):
+    """Extract risks or lessons from document based on doc_type.
+    Returns: dict {risks: [], lessons: [], policies: [], raw_count: int}"""
+    pass
+
+
+def reconcile_with_existing(extracted_items, db_connection):
+    """Compare extracted items against DB.
+    Returns: dict {new: [], duplicates: [], updates: [], report_summary: str}"""
+    pass
+
+
+def process_document_pipeline(filepath, db_connection):
+    """Master pipeline: extract → classify → parse → reconcile.
+    Returns: dict {doc_id, doc_type, summary, extracted, reconciliation}"""
+    pass
