@@ -234,7 +234,50 @@ def delete_document(doc_id):
 def extract_text(filepath, filetype):
     """Extract raw text from PDF, DOCX, XLSX, or TXT file.
     Returns: dict {text, page_count, error}"""
-    pass
+    result = {"text": "", "page_count": 0, "error": None}
+    try:
+        ext = filetype.lower().strip('.')
+
+        if ext == 'pdf':
+            import PyPDF2
+            with open(filepath, 'rb') as f:
+                reader = PyPDF2.PdfReader(f)
+                result["page_count"] = len(reader.pages)
+                result["text"] = "\n".join(
+                    p.extract_text() or "" for p in reader.pages
+                )
+
+        elif ext == 'docx':
+            from docx import Document
+            doc = Document(filepath)
+            result["text"] = "\n".join(p.text for p in doc.paragraphs)
+            result["page_count"] = 1
+
+        elif ext in ['xlsx', 'xls']:
+            import openpyxl
+            wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
+            lines = []
+            for sheet in wb.worksheets:
+                lines.append(f"--- Sheet: {sheet.title} ---")
+                for row in sheet.iter_rows(values_only=True):
+                    row_text = " | ".join(str(c) if c is not None else "" for c in row)
+                    if row_text.strip(" |"):
+                        lines.append(row_text)
+                result["page_count"] += 1
+            result["text"] = "\n".join(lines)
+
+        elif ext == 'txt':
+            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                result["text"] = f.read()
+            result["page_count"] = 1
+
+        else:
+            result["error"] = f"Unsupported file type: {ext}"
+
+    except Exception as e:
+        result["error"] = str(e)
+
+    return result
 
 
 def classify_document(text_sample):
