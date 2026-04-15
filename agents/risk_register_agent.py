@@ -189,23 +189,21 @@ Return ONLY valid JSON — no markdown fences, no preamble:
   ]
 }}"""
 
-    # Non-streaming call with adaptive thinking.
-    # Sonnet 4.6 + thinking completes in ~15-25 s; well within Vercel's 60 s limit.
-    # Falls back to Haiku (no thinking) if that also times out.
+    # Non-streaming call. Use Sonnet for speed + quality.
+    # Fallback to Haiku if Sonnet times out.
     try:
         msg = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=12000,
-            thinking={"type": "adaptive"},
+            max_tokens=6000,
             messages=[{"role": "user", "content": stage2_prompt}],
             timeout=50.0,
         )
     except Exception:
         msg = client.messages.create(
             model=MODEL_FAST,
-            max_tokens=6000,
+            max_tokens=3000,
             messages=[{"role": "user", "content": stage2_prompt}],
-            timeout=25.0,
+            timeout=30.0,
         )
 
     raw2 = ""
