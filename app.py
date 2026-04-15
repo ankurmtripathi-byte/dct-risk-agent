@@ -15,6 +15,7 @@ def create_app() -> Flask:
     app = Flask(__name__)
     app.config["UPLOAD_FOLDER"]      = UPLOAD_FOLDER
     app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
+    app.config["TIMEOUT"]            = 120  # 2 minutes max per request
 
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     init_db()

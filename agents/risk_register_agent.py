@@ -1,6 +1,7 @@
 import io
 import json
 import sqlite3
+import time
 from datetime import datetime
 
 import anthropic
@@ -451,20 +452,28 @@ def generate_risks():
     }
     entity_name = event_data["event_name"]
 
-    try:
-        result       = generate_event_risk_register(event_data)
-        risks_raw    = result["risks"]
-        intelligence = result["intelligence"]
-    except ValueError as e:
-        return jsonify(error=str(e)), 500
-    except json.JSONDecodeError as e:
-        return jsonify(error=f"AI JSON parse error: {e}"), 500
-    except anthropic.AuthenticationError:
-        return jsonify(error="Invalid Anthropic API key"), 401
-    except anthropic.APIError as e:
-        return jsonify(error=f"Anthropic API error: {e}"), 500
-    except Exception as e:  # noqa: BLE001
-        return jsonify(error=f"Unexpected error: {e}"), 500
+    risks_raw    = None
+    intelligence = None
+    last_error   = None
+    for attempt in range(3):
+        try:
+            result       = generate_event_risk_register(event_data)
+            risks_raw    = result["risks"]
+            intelligence = result["intelligence"]
+            break
+        except anthropic.AuthenticationError:
+            return jsonify(error="Invalid Anthropic API key"), 401
+        except Exception as e:  # noqa: BLE001
+            last_error = str(e)
+            if attempt < 2:
+                time.sleep(2)
+            continue
+    else:
+        return jsonify({
+            "error": f"Generation failed after 3 attempts. Last error: {last_error}",
+            "risks": [],
+            "cascade": {},
+        }), 500
 
     conn     = get_db()
     now      = datetime.utcnow().isoformat()
