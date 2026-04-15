@@ -426,10 +426,120 @@ JSON only."""
 def reconcile_with_existing(extracted_items, db_connection):
     """Compare extracted items against DB.
     Returns: dict {new: [], duplicates: [], updates: [], report_summary: str}"""
-    pass
+    result = {"new": [], "duplicates": [], "updates": [], "report_summary": ""}
+
+    if not extracted_items:
+        result["report_summary"] = "No items to reconcile."
+        return result
+
+    # Fetch existing risk titles from DB
+    cursor = db_connection.cursor()
+    cursor.execute("SELECT risk_id, title, description FROM risks")
+    existing = cursor.fetchall()
+    existing_titles = [r[1].lower() for r in existing]
+
+    if not existing_titles:
+        result["new"] = extracted_items
+        result["report_summary"] = f"{len(extracted_items)} new items — register is empty, all items are new."
+        return result
+
+    # Use Claude to compare
+    extracted_summary = "\n".join([
+        f"- {item.get('title','')}: {item.get('description','')[:100]}"
+        for item in extracted_items[:20]
+    ])
+    existing_summary = "\n".join([
+        f"- [{r[0]}] {r[1]}: {r[2][:80] if r[2] else ''}"
+        for r in existing[:30]
+    ])
+
+    try:
+        resp = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1500,
+            messages=[{"role": "user", "content": f"""Compare extracted items against existing register items.
+
+EXTRACTED (from new document):
+{extracted_summary}
+
+EXISTING (in register):
+{existing_summary}
+
+Return ONLY valid JSON:
+{{"new_indices": [0, 1, 2],
+  "duplicate_indices": [3, 4],
+  "update_indices": [5],
+  "summary": "X new risks identified, Y duplicates, Z updates to existing"}}
+
+new_indices: items not in existing register at all
+duplicate_indices: items that are essentially the same as existing
+update_indices: items that exist but have new/different information
+Use the array index position from the EXTRACTED list."""}]
+        )
+        raw = resp.content[0].text.strip()
+        if raw.startswith('```'):
+            raw = raw.split('```')[1]
+            if raw.startswith('json'): raw = raw[4:]
+        mapping = json.loads(raw.strip())
+
+        result["new"] = [extracted_items[i] for i in mapping.get("new_indices", []) if i < len(extracted_items)]
+        result["duplicates"] = [extracted_items[i] for i in mapping.get("duplicate_indices", []) if i < len(extracted_items)]
+        result["updates"] = [extracted_items[i] for i in mapping.get("update_indices", []) if i < len(extracted_items)]
+        result["report_summary"] = mapping.get("summary", "Reconciliation complete.")
+
+    except:
+        # Fallback: mark all as new if Claude fails
+        result["new"] = extracted_items
+        result["report_summary"] = f"{len(extracted_items)} items — reconciliation check skipped, all marked as new."
+
+    return result
 
 
 def process_document_pipeline(filepath, db_connection):
     """Master pipeline: extract → classify → parse → reconcile.
     Returns: dict {doc_id, doc_type, summary, extracted, reconciliation}"""
-    pass
+    filename = Path(filepath).name
+    ext = Path(filepath).suffix.strip('.')
+
+    # Step 1: Extract text
+    extracted = extract_text(filepath, ext)
+    if extracted["error"]:
+        return {"error": extracted["error"], "filename": filename}
+
+    # Step 2: Classify
+    classification = classify_document(extracted["text"])
+    doc_type = classification["doc_type"]
+
+    # Step 3: Extract structured data
+    structured = extract_structured_data(extracted["text"], doc_type, filename)
+
+    # Step 4: Reconcile
+    items_to_reconcile = structured["risks"] or structured["lessons"]
+    reconciliation = reconcile_with_existing(items_to_reconcile, db_connection)
+
+    # Step 5: Save document record to DB
+    cursor = db_connection.cursor()
+    cursor.execute("""
+        INSERT OR REPLACE INTO ingested_documents
+        (filename, doc_type, upload_date, processed,
+         extracted_risks_count, extracted_text, summary)
+        VALUES (?, ?, datetime('now'), 1, ?, ?, ?)
+    """, (
+        filename,
+        doc_type,
+        structured["raw_count"],
+        extracted["text"][:5000],
+        classification["summary"]
+    ))
+    doc_id = cursor.lastrowid
+    db_connection.commit()
+
+    return {
+        "doc_id": doc_id,
+        "filename": filename,
+        "doc_type": doc_type,
+        "classification": classification,
+        "extracted": structured,
+        "reconciliation": reconciliation,
+        "page_count": extracted["page_count"]
+    }
