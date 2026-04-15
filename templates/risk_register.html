@@ -263,6 +263,93 @@
   </div>
 </div>
 
+<!-- ══ RESULTS SECTION (shown after generation) ══ -->
+<div id="resultsSection" style="display:none">
+
+  <!-- Cascade summary bar -->
+  <div class="cascade-bar" id="cascadeBar" style="margin-bottom:16px">
+    <span style="font-size:12px;font-weight:600;color:#374151">Risk Cascade:</span>
+    <span class="cascade-item">Event <span class="cascade-badge" id="cntEvent">0</span></span>
+    <span class="cascade-arrow">→</span>
+    <span class="cascade-item">Department <span class="cascade-badge" id="cntDept">0</span></span>
+    <span class="cascade-arrow">→</span>
+    <span class="cascade-item">Affiliate <span class="cascade-badge" id="cntAffiliate">0</span></span>
+    <span class="cascade-arrow">→</span>
+    <span class="cascade-item">Enterprise <span class="cascade-badge" id="cntEnterprise">0</span></span>
+    <span style="margin-left:auto;display:flex;gap:8px">
+      <button class="btn btn-secondary btn-sm" onclick="exportExcel()">Export Excel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveToRegister()">Save to Register</button>
+    </span>
+  </div>
+
+  <!-- Level tabs -->
+  <div class="level-tabs">
+    <button class="level-tab active" onclick="switchTab('event',this)">Event Risks</button>
+    <button class="level-tab" onclick="switchTab('department',this)">Department</button>
+    <button class="level-tab" onclick="switchTab('affiliate',this)">Affiliate</button>
+    <button class="level-tab" onclick="switchTab('enterprise',this)">Enterprise</button>
+  </div>
+
+  <!-- Two-panel layout -->
+  <div class="rr-layout">
+
+    <!-- Main risk table -->
+    <div class="rr-main">
+      <table class="data-table" id="riskTable">
+        <thead>
+          <tr>
+            <th style="width:80px">Risk ID</th>
+            <th style="width:120px">Category</th>
+            <th>Title</th>
+            <th style="width:60px">L</th>
+            <th style="width:60px">I</th>
+            <th style="width:70px">Score</th>
+            <th style="width:90px">Velocity</th>
+            <th style="width:130px">Owner</th>
+            <th style="width:90px">Status</th>
+          </tr>
+        </thead>
+        <tbody id="riskTableBody">
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="rr-sidebar">
+
+      <!-- Stats -->
+      <div class="side-stats">
+        <h4 style="font-size:13px;font-weight:600;margin:0 0 12px;color:#0a1628">Risk Summary</h4>
+        <div class="side-stat"><span class="side-stat-label">Total Risks</span><span class="side-stat-value" id="statTotal">0</span></div>
+        <div class="side-stat"><span class="side-stat-label" style="color:#991b1b">Critical (20-25)</span><span class="side-stat-value" style="color:#991b1b" id="statCrit">0</span></div>
+        <div class="side-stat"><span class="side-stat-label" style="color:#b45309">High (12-19)</span><span class="side-stat-value" style="color:#b45309" id="statHigh">0</span></div>
+        <div class="side-stat"><span class="side-stat-label" style="color:#854d0e">Medium (6-11)</span><span class="side-stat-value" style="color:#854d0e" id="statMed">0</span></div>
+        <div class="side-stat"><span class="side-stat-label" style="color:#166534">Low (1-5)</span><span class="side-stat-value" style="color:#166534" id="statLow">0</span></div>
+      </div>
+
+      <!-- Heatmap -->
+      <div class="hm-wrap">
+        <h4>Risk Heat Map</h4>
+        <div style="font-size:10px;color:#94a3b8;margin-bottom:6px;text-align:center">Impact →</div>
+        <div class="hm-grid" id="heatmapGrid"></div>
+        <div class="hm-legend" style="margin-top:10px">
+          <span><i style="background:#dcfce7"></i> Low</span>
+          <span><i style="background:#fef9c3"></i> Medium</span>
+          <span><i style="background:#fee2e2"></i> High</span>
+          <span><i style="background:#7f1d1d"></i> Critical</span>
+        </div>
+      </div>
+
+      <!-- Top risks requiring attention -->
+      <div class="side-stats">
+        <h4 style="font-size:13px;font-weight:600;margin:0 0 12px;color:#0a1628">Immediate Attention</h4>
+        <div id="topRisksList"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <!-- ══ ADD/EDIT MODAL ══ -->
 <div class="modal-bg" id="riskModal">
   <div class="modal" style="max-width:720px">
