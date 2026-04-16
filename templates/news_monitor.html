@@ -41,11 +41,11 @@
 <!-- Filter bar -->
 <div class="filter-bar">
   <span class="muted small" style="margin-right:4px">Filter:</span>
-  <button class="filter-btn active" id="filter-all"        onclick="setFilter('all',this)">All</button>
-  <button class="filter-btn"        id="filter-immediate"  onclick="setFilter('immediate',this)">&#128308; Immediate</button>
-  <button class="filter-btn"        id="filter-elevated"   onclick="setFilter('elevated',this)">&#128993; Elevated</button>
-  <button class="filter-btn"        id="filter-monitor"    onclick="setFilter('monitor',this)">&#128994; Monitor</button>
-  <button class="filter-btn"        id="filter-high"       onclick="setFilter('high',this)">&#11088; High Relevance (&ge;7)</button>
+  <button class="filter-btn active" id="filter-all"        onclick="filterFeed('all',this)">All</button>
+  <button class="filter-btn"        id="filter-immediate"  onclick="filterFeed('immediate',this)">&#128308; Immediate</button>
+  <button class="filter-btn"        id="filter-elevated"   onclick="filterFeed('elevated',this)">&#128993; Elevated</button>
+  <button class="filter-btn"        id="filter-monitor"    onclick="filterFeed('monitor',this)">&#128994; Monitor</button>
+  <button class="filter-btn"        id="filter-high"       onclick="filterFeed('high',this)">&#11088; High Relevance (&ge;7)</button>
 </div>
 
 <!-- Two-column layout -->
@@ -78,65 +78,189 @@
 
 {% block scripts %}
 <script>
-let _allItems   = [];
-let _activeFilter = 'all';
+let allNewsItems  = [];
+let currentFilter = 'all';
 
-function setFilter(name, btn) {
-  _activeFilter = name;
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  applyFilter();
+/* ── on page load: pull cached status (no pipeline call) ── */
+async function loadNews() {
+  try {
+    const s = await fetch('/api/news/refresh-status').then(r => r.json());
+    updateKPIs({
+      total:       s.items_last_48h || 0,
+      highRel:     s.high_relevance  || 0,
+      risksUpdated: s.risks_updated  || 0,
+      newTriggered: '—'
+    });
+    document.getElementById('lastRefreshed').textContent =
+      (s.last_refresh && s.last_refresh !== 'Never')
+        ? new Date(s.last_refresh).toLocaleTimeString('en-GB')
+        : 'Never';
+  } catch(e) { /* silent */ }
 }
 
-function applyFilter() {
-  // Placeholder — news feed rendering added in Part B
-  console.log('Filter set to:', _activeFilter);
-}
-
+/* ── full pipeline call triggered by Refresh button ── */
 async function refreshNews() {
   document.getElementById('lastRefreshed').textContent = 'Loading…';
+  showFeedSkeleton();
+
   try {
     const resp = await fetch('/api/news/fetch');
     const data = await resp.json();
 
-    const items = data.items || [];
-    _allItems = items;
+    const items        = data.items   || [];
+    const mapping      = data.mapping || {};
+    const bulletin     = data.bulletin || {};
+    allNewsItems       = items;
 
-    // KPI totals
-    const highRel     = items.filter(i => (i.relevance_score || 0) >= 7).length;
-    const newTriggered = (data.mapping || {}).new_triggered?.length || 0;
-    const risksUpdated = (data.mapping || {}).amplified?.length    || 0;
+    const highRel      = items.filter(i => (i.relevance_score || 0) >= 7).length;
+    const newTriggered = mapping.new_triggered?.length  || 0;
+    const risksUpdated = mapping.amplified?.length      || 0;
 
-    document.getElementById('kpiTotal').textContent        = items.length;
-    document.getElementById('kpiHighRel').textContent      = highRel;
-    document.getElementById('kpiRisksUpdated').textContent = risksUpdated;
-    document.getElementById('kpiNewRisks').textContent     = newTriggered;
-    document.getElementById('lastRefreshed').textContent   =
+    updateKPIs({ total: items.length, highRel, risksUpdated, newTriggered });
+
+    document.getElementById('lastRefreshed').textContent =
       data.last_run ? new Date(data.last_run).toLocaleTimeString('en-GB') : 'just now';
 
     // Demo banner
     const isDemo = items.some(i => i.demo === true);
     document.getElementById('demoBanner').style.display = isDemo ? 'flex' : 'none';
 
+    renderFeed(items);
+    renderBulletin(bulletin, mapping);
+
   } catch(e) {
     document.getElementById('lastRefreshed').textContent = 'Error';
+    document.getElementById('newsFeed').innerHTML =
+      `<p class="muted" style="padding:20px 0;text-align:center;color:var(--red)">
+        Failed to load news: ${e.message}
+       </p>`;
     if (typeof showToast !== 'undefined') showToast(e.message, 'error');
   }
 }
 
-// Load refresh status on page load (no full pipeline call)
-(async function loadStatus() {
-  try {
-    const s = await fetch('/api/news/refresh-status').then(r => r.json());
-    document.getElementById('kpiTotal').textContent        = s.items_last_48h  || 0;
-    document.getElementById('kpiHighRel').textContent      = s.high_relevance  || 0;
-    document.getElementById('kpiRisksUpdated').textContent = s.risks_updated   || 0;
-    document.getElementById('kpiNewRisks').textContent     = '—';
-    document.getElementById('lastRefreshed').textContent   =
-      (s.last_refresh && s.last_refresh !== 'Never')
-        ? new Date(s.last_refresh).toLocaleTimeString('en-GB')
-        : 'Never';
-  } catch(e) { /* silent */ }
-})();
+/* ── skeleton loader while fetch is in-flight ── */
+function showFeedSkeleton() {
+  const feed = document.getElementById('newsFeed');
+  feed.innerHTML = Array(4).fill(0).map(() => `
+    <div class="news-card" style="opacity:.4;pointer-events:none">
+      <div style="height:16px;width:60%;background:var(--border);border-radius:4px;margin-bottom:8px"></div>
+      <div style="height:12px;width:90%;background:var(--border);border-radius:4px;margin-bottom:6px"></div>
+      <div style="height:12px;width:75%;background:var(--border);border-radius:4px"></div>
+    </div>`).join('');
+}
+
+/* ── filter buttons ── */
+function filterFeed(name, btn) {
+  currentFilter = name;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderFeed(allNewsItems);
+}
+
+/* ── render article cards ── */
+function renderFeed(items) {
+  const feed = document.getElementById('newsFeed');
+
+  let visible = items;
+  if (currentFilter === 'high')      visible = items.filter(i => (i.relevance_score || 0) >= 7);
+  else if (currentFilter !== 'all')  visible = items.filter(i => i.urgency === currentFilter);
+
+  if (!visible.length) {
+    feed.innerHTML = `<p class="muted" style="padding:20px 0;text-align:center">
+      No articles match this filter.</p>`;
+    return;
+  }
+
+  feed.innerHTML = visible.map(item => {
+    const score   = item.relevance_score || 0;
+    const relClass = score >= 7 ? 'high' : score >= 5 ? 'med' : 'low';
+    const urgency  = item.urgency || 'monitor';
+    const urgIcon  = urgency === 'immediate' ? '🔴' : urgency === 'elevated' ? '🟠' : '🟢';
+    const tags     = (item.risk_categories || [])
+      .map(t => `<span class="news-tag">${t}</span>`).join('');
+    const ago      = getTimeAgo(item.published_date);
+
+    return `
+      <div class="news-card urgency-${urgency}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+          <a class="news-headline" href="${item.url || '#'}" target="_blank" rel="noopener">
+            ${item.headline || 'Untitled'}
+          </a>
+          <span class="rel-badge ${relClass}">${score.toFixed(1)}</span>
+        </div>
+        <div class="news-meta">
+          ${urgIcon} <span class="urgency-badge ${urgency}">${urgency.charAt(0).toUpperCase()+urgency.slice(1)}</span>
+          &nbsp;·&nbsp; ${item.source || ''}
+          &nbsp;·&nbsp; ${ago}
+        </div>
+        ${item.one_line_insight
+          ? `<div class="news-insight">${item.one_line_insight}</div>`
+          : ''}
+        ${tags ? `<div class="news-tags">${tags}</div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+/* ── render right-hand bulletin panel ── */
+function renderBulletin(bulletin, mapping) {
+  const panel = document.getElementById('bulletinPanel');
+  if (!bulletin || !Object.keys(bulletin).length) {
+    panel.innerHTML = `
+      <div class="bulletin-card">
+        <h3>📰 Intelligence Bulletin</h3>
+        <p class="muted small" style="text-align:center;padding:16px 0">
+          No bulletin data available.
+        </p>
+      </div>`;
+    return;
+  }
+
+  const ampList = (mapping.amplified || [])
+    .map(r => `<div class="bulletin-risk-item">&#8599; ${r.risk_title || r}</div>`).join('');
+
+  const trigList = (mapping.new_triggered || [])
+    .map(r => `<div class="bulletin-risk-item alert">&#43; ${r.risk_title || r}</div>`).join('');
+
+  const actionList = (bulletin.recommended_actions || [])
+    .map(a => `<div class="action-item">&#8227; ${a}</div>`).join('');
+
+  panel.innerHTML = `
+    <div class="bulletin-card">
+      <h3>📰 Intelligence Bulletin</h3>
+      ${bulletin.overall_threat_level
+        ? `<p><strong>Threat Level:</strong>
+           <span class="urgency-badge ${(bulletin.overall_threat_level||'').toLowerCase()}">
+             ${bulletin.overall_threat_level}
+           </span></p>`
+        : ''}
+      ${bulletin.executive_summary
+        ? `<p class="small">${bulletin.executive_summary}</p>` : ''}
+
+      ${ampList ? `<h4 style="margin:12px 0 4px">Amplified Risks</h4>${ampList}` : ''}
+      ${trigList ? `<h4 style="margin:12px 0 4px">New Risks Triggered</h4>${trigList}` : ''}
+      ${actionList ? `<h4 style="margin:12px 0 4px">Recommended Actions</h4>${actionList}` : ''}
+    </div>`;
+}
+
+/* ── update KPI row ── */
+function updateKPIs({ total, highRel, risksUpdated, newTriggered }) {
+  document.getElementById('kpiTotal').textContent        = total        ?? '—';
+  document.getElementById('kpiHighRel').textContent      = highRel      ?? '—';
+  document.getElementById('kpiRisksUpdated').textContent = risksUpdated ?? '—';
+  document.getElementById('kpiNewRisks').textContent     = newTriggered ?? '—';
+}
+
+/* ── human-readable time delta ── */
+function getTimeAgo(dateStr) {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins  = Math.floor(diff / 60000);
+  if (mins < 60)  return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)   return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+window.addEventListener('load', loadNews);
 </script>
 {% endblock %}
