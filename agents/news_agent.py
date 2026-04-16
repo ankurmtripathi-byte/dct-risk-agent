@@ -289,11 +289,136 @@ def delete_news_item(item_id):
 
 # ── Pipeline utility functions (stubs — logic to be implemented) ──────────────
 
+DEFAULT_TOPICS = [
+    "Abu Dhabi events",
+    "UAE crowd safety",
+    "Abu Dhabi weather",
+    "UAE tourism",
+    "Abu Dhabi concerts festivals",
+    "UAE regulatory compliance",
+    "Abu Dhabi security",
+    "UAE aviation disruption",
+    "Abu Dhabi infrastructure construction",
+    "Middle East political stability"
+]
+
+SYNTHETIC_NEWS = [
+    {
+        "headline": "Etihad Airways cancels 12 flights due to operational disruption",
+        "source": "The National",
+        "url": "https://www.thenationalnews.com",
+        "description": "Etihad Airways announced cancellation of 12 routes this weekend citing crew availability issues, affecting an estimated 4,200 passengers.",
+        "published_date": (datetime.now() - timedelta(hours=6)).isoformat(),
+        "demo": True
+    },
+    {
+        "headline": "UAE issues heat advisory — temperatures to exceed 46°C across Abu Dhabi",
+        "source": "WAM News Agency",
+        "url": "https://wam.ae",
+        "description": "The National Centre of Meteorology has issued a Level 2 heat advisory for Abu Dhabi emirate. Outdoor gatherings of over 500 people advised to have cooling stations.",
+        "published_date": (datetime.now() - timedelta(hours=3)).isoformat(),
+        "demo": True
+    },
+    {
+        "headline": "Abu Dhabi Police issue new crowd management guidelines for large events",
+        "source": "Gulf News",
+        "url": "https://gulfnews.com",
+        "description": "Abu Dhabi Police released updated crowd safety regulations requiring events over 10,000 attendees to submit revised security plans 30 days in advance.",
+        "published_date": (datetime.now() - timedelta(hours=12)).isoformat(),
+        "demo": True
+    },
+    {
+        "headline": "Cyber attack disrupts ticketing systems at major UAE venue",
+        "source": "Arabian Business",
+        "url": "https://www.arabianbusiness.com",
+        "description": "A regional entertainment venue reported a ransomware attack on its online ticketing platform, forcing manual check-in for 8,000 attendees over the weekend.",
+        "published_date": (datetime.now() - timedelta(hours=18)).isoformat(),
+        "demo": True
+    },
+    {
+        "headline": "UAE Ministry of Economy tightens contractor licensing requirements",
+        "source": "Khaleej Times",
+        "url": "https://www.khaleejtimes.com",
+        "description": "New regulations effective Q2 2026 require all event contractors above AED 500,000 contract value to hold updated federal licensing. Grace period of 90 days granted.",
+        "published_date": (datetime.now() - timedelta(hours=24)).isoformat(),
+        "demo": True
+    },
+    {
+        "headline": "Massive dust storm forecast for Abu Dhabi — outdoor events at risk",
+        "source": "The National",
+        "url": "https://www.thenationalnews.com",
+        "description": "Meteorologists warn of a severe shamal dust storm expected to hit Abu Dhabi on Thursday and Friday. Visibility may drop below 500m in some areas.",
+        "published_date": (datetime.now() - timedelta(hours=2)).isoformat(),
+        "demo": True
+    },
+    {
+        "headline": "Abu Dhabi records 14% surge in international tourist arrivals Q1 2026",
+        "source": "WAM News Agency",
+        "url": "https://wam.ae",
+        "description": "DCT Abu Dhabi tourism report shows record-breaking Q1 2026 arrivals, with hotel occupancy at 91%. Major events cited as primary driver.",
+        "published_date": (datetime.now() - timedelta(hours=36)).isoformat(),
+        "demo": True
+    },
+    {
+        "headline": "Regional geopolitical tensions prompt heightened UAE security posture",
+        "source": "Reuters",
+        "url": "https://reuters.com",
+        "description": "UAE security authorities have elevated threat monitoring protocols following regional developments. Large public gatherings subject to enhanced screening procedures.",
+        "published_date": (datetime.now() - timedelta(hours=8)).isoformat(),
+        "demo": True
+    }
+]
+
+
 def fetch_news(topics_list=None):
     """Fetch news from NewsAPI for DCT-relevant topics.
     Falls back to synthetic demo data if NEWSAPI_KEY not set.
     Returns: list of raw news item dicts"""
-    pass
+    api_key = getattr(config, 'NEWSAPI_KEY', None) or os.environ.get('NEWSAPI_KEY')
+    topics = topics_list or DEFAULT_TOPICS
+
+    # Demo fallback
+    if not api_key or api_key in ['', 'your-newsapi-key-here']:
+        print(">> News Agent: No NEWSAPI_KEY found — using demo data")
+        return SYNTHETIC_NEWS
+
+    seen_urls = set()
+    all_items = []
+    cutoff = (datetime.now() - timedelta(hours=48)).strftime('%Y-%m-%dT%H:%M:%S')
+
+    for topic in topics[:6]:  # Limit to 6 topics on free tier
+        try:
+            resp = requests.get(
+                'https://newsapi.org/v2/everything',
+                params={
+                    'q': topic,
+                    'from': cutoff,
+                    'sortBy': 'publishedAt',
+                    'language': 'en',
+                    'pageSize': 5,
+                    'apiKey': api_key
+                },
+                timeout=10
+            )
+            if resp.status_code == 200:
+                for article in resp.json().get('articles', []):
+                    url = article.get('url', '')
+                    if url and url not in seen_urls:
+                        seen_urls.add(url)
+                        all_items.append({
+                            "headline": article.get('title', ''),
+                            "source": article.get('source', {}).get('name', ''),
+                            "url": url,
+                            "description": article.get('description', '') or '',
+                            "published_date": article.get('publishedAt', ''),
+                            "demo": False
+                        })
+        except Exception as e:
+            print(f">> News fetch error for topic '{topic}': {e}")
+            continue
+
+    print(f">> News Agent: Fetched {len(all_items)} articles from NewsAPI")
+    return all_items if all_items else SYNTHETIC_NEWS
 
 
 def analyze_relevance(news_items):
