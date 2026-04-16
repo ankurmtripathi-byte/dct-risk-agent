@@ -484,7 +484,7 @@ JSON array only. No explanation."""}]
             if idx < len(news_items) and score_obj.get('relevance_score', 0) >= 4:
                 item = news_items[idx].copy()
                 item['relevance_score'] = score_obj.get('relevance_score', 0)
-                item['urgency'] = score_obj.get('urgency', 'Monitor')
+                item['urgency'] = score_obj.get('urgency', 'Monitor').lower()
                 item['risk_categories'] = score_obj.get('risk_categories', [])
                 item['one_line_insight'] = score_obj.get('one_line_insight', '')
                 scored_items.append(item)
@@ -497,7 +497,7 @@ JSON array only. No explanation."""}]
     except Exception as e:
         print(f">> Relevance analysis error: {e}")
         # Return all items with default scores on failure
-        return [{**item, 'relevance_score': 5, 'urgency': 'Monitor',
+        return [{**item, 'relevance_score': 5, 'urgency': 'monitor',
                  'risk_categories': ['Operational'],
                  'one_line_insight': 'Manual review required.'}
                 for item in news_items]
@@ -506,13 +506,154 @@ JSON array only. No explanation."""}]
 def map_to_risks(high_relevance_items, db_connection):
     """For items scoring >= 7, map to existing DB risks or flag as new.
     Returns: dict {amplified: [], new_triggered: [], resolved: [], report: str}"""
-    pass
+    if not high_relevance_items:
+        return {"amplified": [], "new_triggered": [], "resolved": [], "report": "No high-relevance items to map."}
+
+    # Pull open risks from DB (title + category for matching)
+    cursor = db_connection.cursor()
+    cursor.execute("SELECT risk_id, title, category, status FROM risks WHERE status='Open' LIMIT 50")
+    db_risks = [{"risk_id": r[0], "title": r[1], "category": r[2]} for r in cursor.fetchall()]
+
+    news_summary = "\n".join([
+        f"- [{i['urgency'].upper()}] {i['headline']} (score {i['relevance_score']}, categories: {', '.join(i.get('risk_categories', []))})"
+        for i in high_relevance_items
+    ])
+    risks_summary = "\n".join([
+        f"- {r['risk_id']}: {r['title']} [{r['category']}]"
+        for r in db_risks
+    ]) or "No existing open risks in register."
+
+    try:
+        resp = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1000,
+            messages=[{"role": "user", "content": f"""You are a risk analyst. Given these high-relevance news items and existing open risks, identify matches.
+
+HIGH-RELEVANCE NEWS:
+{news_summary}
+
+EXISTING OPEN RISKS:
+{risks_summary}
+
+Return ONLY valid JSON:
+{{
+  "amplified": [
+    {{"risk_id": "...", "risk_title": "...", "news_headline": "...", "reason": "one sentence"}}
+  ],
+  "new_triggered": [
+    {{"risk_title": "...", "category": "...", "news_headline": "...", "reason": "one sentence"}}
+  ]
+}}
+
+amplified: existing risks made more likely/severe by the news.
+new_triggered: genuinely new risks not in the register. Only include if truly novel.
+Keep lists concise — max 3 per category."""}]
+        )
+
+        raw = resp.content[0].text.strip()
+        if raw.startswith('```'):
+            raw = raw.split('```')[1]
+            if raw.startswith('json'):
+                raw = raw[4:]
+        result = json.loads(raw.strip())
+        result.setdefault("amplified", [])
+        result.setdefault("new_triggered", [])
+        result["resolved"] = []
+        result["report"] = (
+            f"Mapped {len(high_relevance_items)} high-relevance articles. "
+            f"{len(result['amplified'])} existing risks amplified, "
+            f"{len(result['new_triggered'])} new risks triggered."
+        )
+        return result
+
+    except Exception as e:
+        print(f">> map_to_risks error: {e}")
+        return {"amplified": [], "new_triggered": [], "resolved": [], "report": f"Mapping error: {e}"}
 
 
 def generate_risk_bulletin(analyzed_items):
-    """Generate executive intelligence brief using Claude Opus.
-    Returns: dict {situation_overview, top_risks, recommended_actions, watch_list}"""
-    pass
+    """Generate executive intelligence brief from scored news items.
+    Returns: dict {overall_threat_level, executive_summary, recommended_actions,
+                   top_risks, watch_list}"""
+    if not analyzed_items:
+        return {
+            "overall_threat_level": "monitor",
+            "executive_summary": "No news items analysed in the last 48 hours.",
+            "recommended_actions": [],
+            "top_risks": [],
+            "watch_list": []
+        }
+
+    # Build concise input for Claude
+    top_items = sorted(analyzed_items, key=lambda x: x.get('relevance_score', 0), reverse=True)[:8]
+    news_block = "\n".join([
+        f"- [{i.get('urgency','monitor').upper()}] (score {i.get('relevance_score',0)}) "
+        f"{i['headline']} — {i.get('one_line_insight','')}"
+        for i in top_items
+    ])
+
+    immediate_count = sum(1 for i in analyzed_items if i.get('urgency') == 'immediate')
+    elevated_count  = sum(1 for i in analyzed_items if i.get('urgency') == 'elevated')
+
+    if immediate_count >= 2:
+        suggested_level = "immediate"
+    elif immediate_count == 1 or elevated_count >= 2:
+        suggested_level = "elevated"
+    else:
+        suggested_level = "monitor"
+
+    try:
+        resp = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1200,
+            messages=[{"role": "user", "content": f"""You are a senior risk intelligence analyst for DCT Abu Dhabi (Department of Culture and Tourism).
+Write a concise daily intelligence bulletin from these scored news items.
+
+TOP NEWS ITEMS (last 48h):
+{news_block}
+
+Suggested overall threat level: {suggested_level}
+
+Return ONLY valid JSON:
+{{
+  "overall_threat_level": "immediate|elevated|monitor",
+  "executive_summary": "2-3 sentence paragraph summarising the overall risk picture for DCT today.",
+  "recommended_actions": [
+    "Specific action 1",
+    "Specific action 2",
+    "Specific action 3"
+  ],
+  "top_risks": [
+    {{"title": "...", "urgency": "immediate|elevated|monitor", "detail": "one sentence"}}
+  ],
+  "watch_list": [
+    "Topic or developing situation to monitor 1",
+    "Topic or developing situation to monitor 2"
+  ]
+}}
+
+Keep recommended_actions to 3–5 concrete, DCT-specific actions. top_risks max 4 items. watch_list max 3 items."""}]
+        )
+
+        raw = resp.content[0].text.strip()
+        if raw.startswith('```'):
+            raw = raw.split('```')[1]
+            if raw.startswith('json'):
+                raw = raw[4:]
+        result = json.loads(raw.strip())
+        # Normalise threat level to lowercase
+        result['overall_threat_level'] = result.get('overall_threat_level', suggested_level).lower()
+        return result
+
+    except Exception as e:
+        print(f">> generate_risk_bulletin error: {e}")
+        return {
+            "overall_threat_level": suggested_level,
+            "executive_summary": f"Bulletin generation failed: {e}. Manual review of {len(analyzed_items)} news items recommended.",
+            "recommended_actions": ["Review high-relevance news items manually"],
+            "top_risks": [],
+            "watch_list": []
+        }
 
 
 def get_refresh_status(db_connection):
