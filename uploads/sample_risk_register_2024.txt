@@ -1,0 +1,13 @@
+DCT EVENTS DEPARTMENT — RISK REGISTER 2024
+
+Risk ID | Category | Risk Title | Description | Likelihood | Impact | Mitigation | Owner
+R-001 | Safety | Crowd Crush at Entry Gates | Large crowds during peak entry times may cause dangerous crushing at narrow entry gates | 4 | 5 | Install crowd barriers, deploy additional stewards, stagger entry times | Head of Security
+R-002 | Operational | Contractor Non-Delivery | Key AV contractor may fail to deliver equipment on time due to supply chain issues | 3 | 4 | Dual supplier agreement, 48hr equipment check protocol | Events Manager
+R-003 | Reputational | Social Media Incident | Negative social media coverage during event due to poor guest experience | 3 | 3 | Media monitoring team, rapid response protocol, VIP experience manager | Communications Lead
+R-004 | Financial | Ticket Revenue Shortfall | Lower than projected ticket sales due to competing events in same weekend | 3 | 4 | Early bird pricing, corporate package sales, marketing campaign | Finance Manager
+R-005 | Compliance | Permit Delays | Municipality permits not issued in time causing event postponement | 2 | 5 | Apply 90 days in advance, dedicated liaison officer with Abu Dhabi Municipality | Legal & Compliance
+R-006 | Safety | Medical Emergency Capacity | On-site medical team insufficient for attendance of 20,000+ | 3 | 5 | SEHA partnership, 2 ambulances on standby, trained first aiders per 500 guests | Health & Safety
+R-007 | Operational | Weather Disruption | Outdoor event vulnerable to sandstorm or unexpected rainfall | 4 | 3 | Weather monitoring 72hr in advance, shelter contingency plan, postponement protocol | Operations Director
+R-008 | Strategic | Headline Act Cancellation | Lead performer cancels within 48hrs of event | 2 | 5 | Contractual penalty clauses, backup performer on standby, refund policy ready | CEO Office
+R-009 | Operational | Parking & Transport Failure | Insufficient parking and shuttle services causing guest dissatisfaction | 4 | 3 | Pre-book parking, 3 shuttle routes, ADDC coordination | Logistics Manager
+R-010 | Reputational | VIP Protocol Breach | Mishandling of VIP or government guest causing diplomatic sensitivity | 2 | 5 | Dedicated VIP team, protocol officer, pre-event briefing for all senior staff | Protocol Officer

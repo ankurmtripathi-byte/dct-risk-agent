@@ -1,0 +1,30 @@
+LESSONS LEARNED REPORT
+Event: Abu Dhabi Summer Entertainment Programme 2024
+Prepared by: Events Risk Team | Date: September 2024
+
+LESSON 1 — CROWD MANAGEMENT
+Event: Opening Night Concert, Yas Island Amphitheatre, July 2024
+What Happened: Entry gates opened 30 minutes late due to IT ticketing system failure.
+Approximately 3,000 guests queued in 42°C heat. Two guests required medical attention for heat exhaustion.
+Root Cause: Ticketing vendor performed a software update 2 hours before gates opened without notifying DCT.
+Corrective Action: Ticketing system locked from changes 72 hours before any event. Manual backup ticketing deployed.
+Preventive Action: All vendor system change freezes to be written into contracts. Test run mandatory 24hrs before event.
+
+LESSON 2 — CONTRACTOR MANAGEMENT
+Event: Cultural Festival, Manarat Al Saadiyat, August 2024
+What Happened: Stage construction contractor mobilised 6 hours late. Event opening delayed by 2 hours.
+Live broadcast window missed. Estimated reputational and contractual cost: AED 450,000.
+Root Cause: Contractor had conflicting commitment at another venue. DCT had no exclusivity clause.
+Corrective Action: Issued formal notice to contractor. Penalty clause invoked.
+Preventive Action: All key contractors to have exclusivity clauses for event day +2 days prior.
+Backup contractor list maintained for all critical services.
+
+LESSON 3 — WEATHER CONTINGENCY
+Event: Outdoor Film Screening, Corniche, February 2024
+What Happened: Unexpected wind advisory (35 knots) issued 4 hours before event.
+No pre-agreed decision framework existed. Team spent 2 hours debating cancellation.
+Event proceeded, screen partially damaged, guest experience poor.
+Root Cause: No pre-defined weather decision matrix. Escalation path unclear.
+Corrective Action: Event cancelled early and guests notified. Partial refund issued.
+Preventive Action: Weather decision matrix created — wind >25 knots = postpone outdoor screening.
+Decision authority assigned to Operations Director. NCMS monitoring mandatory for all outdoor events.
