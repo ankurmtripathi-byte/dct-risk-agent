@@ -1,12 +1,16 @@
 import json
-from datetime import datetime
+import os
+from datetime import datetime, timedelta
 
 import anthropic
 import requests
 from flask import Blueprint, jsonify, render_template, request
 
+import config
 from config import ANTHROPIC_API_KEY, MODEL_FAST, NEWSAPI_KEY
 from database import get_db
+
+client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
 
 news_bp = Blueprint("news", __name__)
 
@@ -281,3 +285,36 @@ def delete_news_item(item_id):
     conn.commit()
     conn.close()
     return jsonify(deleted=True)
+
+
+# ── Pipeline utility functions (stubs — logic to be implemented) ──────────────
+
+def fetch_news(topics_list=None):
+    """Fetch news from NewsAPI for DCT-relevant topics.
+    Falls back to synthetic demo data if NEWSAPI_KEY not set.
+    Returns: list of raw news item dicts"""
+    pass
+
+
+def analyze_relevance(news_items):
+    """Score each news item for DCT risk relevance using Claude Haiku.
+    Returns: list of scored news items, filtered to relevance >= 4"""
+    pass
+
+
+def map_to_risks(high_relevance_items, db_connection):
+    """For items scoring >= 7, map to existing DB risks or flag as new.
+    Returns: dict {amplified: [], new_triggered: [], resolved: [], report: str}"""
+    pass
+
+
+def generate_risk_bulletin(analyzed_items):
+    """Generate executive intelligence brief using Claude Opus.
+    Returns: dict {situation_overview, top_risks, recommended_actions, watch_list}"""
+    pass
+
+
+def get_refresh_status(db_connection):
+    """Return last refresh timestamp and item counts from DB.
+    Returns: dict {last_refresh, items_last_48h, high_relevance, risks_updated}"""
+    pass
