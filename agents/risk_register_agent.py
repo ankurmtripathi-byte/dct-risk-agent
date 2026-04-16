@@ -81,9 +81,6 @@ def generate_event_risk_register(event_data: dict) -> dict:
     notes         = event_data.get("notes", "")
 
     # ── CALL 1: Context amplifiers (Haiku — fast) ────────────────────────────
-    import time as _time
-    _t0 = _time.time()
-    print(">> Context analysis starting...")
     context_response = client.messages.create(
         model=MODEL_FAST,
         max_tokens=800,
@@ -100,11 +97,9 @@ Return ONLY valid JSON: {{"amplifiers": ["...", "..."], "correlations": ["...", 
     )
     context_text = context_response.content[0].text
     try:
-        amplifiers = json.loads(_strip_fences(context_text))
+        amplifiers = json.loads(context_text)
     except Exception:
         amplifiers = {"amplifiers": [], "correlations": []}
-    print(f">> Context done ({_time.time()-_t0:.1f}s). Starting batch 1...")
-    _t1 = _time.time()
 
     # ── Shared context string for all risk batches ────────────────────────────
     context_str = f"""Event: {event_name}
@@ -165,28 +160,23 @@ No preamble. No explanation. JSON array only."""
         return json.loads(text.strip())
 
     # ── CALLS 2-4: 5 risks each across 3 batches ─────────────────────────────
+    # ── CALLS 2-4: 5 risks each across 3 batches ─────────────────────────────
     batch1 = call_risks_batch(
         ["Safety & Security", "Safety & Security", "Operational", "Operational", "Operational"],
         start_id=1
     )
-    print(f">> Batch 1 done ({_time.time()-_t1:.1f}s): {len(batch1)} risks")
-    _t2 = _time.time()
     batch2 = call_risks_batch(
         ["Reputational", "Reputational", "Financial", "Financial", "Compliance & Regulatory"],
         start_id=6
     )
-    print(f">> Batch 2 done ({_time.time()-_t2:.1f}s): {len(batch2)} risks")
-    _t3 = _time.time()
     batch3 = call_risks_batch(
         ["Compliance & Regulatory", "Environmental & Health", "Environmental & Health", "Strategic", "Operational"],
         start_id=11
     )
-    print(f">> Batch 3 done ({_time.time()-_t3:.1f}s): {len(batch3)} risks")
-    print(f">> Total generation time: {_time.time()-_t0:.1f}s | Total risks: {len(batch1)+len(batch2)+len(batch3)}")
 
     all_risks = batch1 + batch2 + batch3
 
-    return {"risks": all_risks, "amplifiers": amplifiers, "intelligence": amplifiers}
+    return {"risks": all_risks, "cascade": [], "amplifiers": amplifiers, "intelligence": amplifiers}
 
 
 def cascade_to_hierarchy(event_risks: list, entity_name: str, conn) -> list:
