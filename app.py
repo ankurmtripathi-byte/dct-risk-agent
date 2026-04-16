@@ -16,7 +16,7 @@ from agents.news_agent           import (news_bp, fetch_news, analyze_relevance,
                                          map_to_risks, generate_risk_bulletin,
                                          get_refresh_status)
 from agents.arc_pack_agent       import arc_pack_bp
-from agents.coordination_agent   import coordination_bp
+from agents.coordination_agent   import coordination_bp, seed_agencies
 
 ALLOWED_EXTENSIONS = {'pdf', 'docx', 'xlsx', 'txt'}
 
@@ -36,6 +36,11 @@ def create_app() -> Flask:
 
     from agents.ingestion_agent import seed_sample_documents
     seed_sample_documents(UPLOAD_FOLDER)
+
+    import sqlite3 as _sqlite3
+    _seed_conn = _sqlite3.connect(DB_PATH)
+    seed_agencies(_seed_conn)
+    _seed_conn.close()
 
     app.register_blueprint(risk_register_bp)
     app.register_blueprint(ingestion_bp)

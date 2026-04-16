@@ -1,22 +1,26 @@
 {% extends "base.html" %}
 {% block title %}Agency Coordination · DCT Risk Intelligence{% endblock %}
-{% block page_title %}Agency Coordination{% endblock %}
-{% block page_sub %}Cross-agency risk sharing and coordination matrix{% endblock %}
+{% block page_title %}Cross-Agency Coordination{% endblock %}
+{% block page_sub %}Risk sharing, inter-agency briefs and formal memos{% endblock %}
 
 {% block top_actions %}
   <button class="btn-primary" onclick="openAgencyModal()">&#43; Add Agency</button>
 {% endblock %}
 
 {% block content %}
-<!-- Matrix Summary -->
+
+<!-- ── 1. Shared Risk Matrix ──────────────────────────────────────────────── -->
 <div class="card" id="matrixCard">
-  <div class="card-head"><span class="card-title">&#9969; Risk Sharing Matrix</span></div>
+  <div class="card-head">
+    <span class="card-title">&#9969; Shared Risk Matrix</span>
+    <button class="btn-ghost btn-sm" onclick="loadMatrix()">&#8635; Refresh</button>
+  </div>
   <div class="card-body" id="matrixBody">
     <p class="empty-msg">Loading…</p>
   </div>
 </div>
 
-<!-- Agency List -->
+<!-- ── 2. Agency Register ─────────────────────────────────────────────────── -->
 <div class="card mt16">
   <div class="card-head">
     <span class="card-title" id="agencyCount">Agencies</span>
@@ -25,16 +29,99 @@
   <div class="card-body p0">
     <table class="data-table">
       <thead>
-        <tr><th>Agency Name</th><th>Type</th><th>Contact</th><th>Email</th><th>Risk Sharing</th><th>Actions</th></tr>
+        <tr>
+          <th>Agency Name</th><th>Type</th><th>Contact</th><th>Email</th>
+          <th>Risk Sharing</th><th>Shared Risks</th><th>Actions</th>
+        </tr>
       </thead>
       <tbody id="agencyTbody">
-        <tr><td colspan="6" class="empty-msg">Loading…</td></tr>
+        <tr><td colspan="7" class="empty-msg">Loading…</td></tr>
       </tbody>
     </table>
   </div>
 </div>
 
-<!-- Shared Risks View -->
+<!-- ── 3. Brief + Memo row ────────────────────────────────────────────────── -->
+<div class="two-col-layout mt16" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+  <!-- Agency Brief Generator -->
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title">&#128196; Agency Risk Brief</span>
+    </div>
+    <div class="card-body">
+      <div class="form-group">
+        <label>Recipient Agency</label>
+        <select id="briefAgency" style="width:100%">
+          <option value="">Select agency…</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Risks to Include</label>
+        <div style="border:1px solid var(--border);border-radius:6px;max-height:180px;overflow-y:auto;padding:4px 0" id="riskCheckboxList">
+          <p class="muted small" style="padding:8px 12px">Loading risks…</p>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button class="btn-ghost btn-sm" onclick="selectAllRisks(true)">Select All</button>
+          <button class="btn-ghost btn-sm" onclick="selectAllRisks(false)">Clear</button>
+          <span class="muted small" id="selectedCount" style="align-self:center"></span>
+        </div>
+      </div>
+      <button class="btn-primary" style="width:100%" onclick="generateBrief()" id="briefBtn">
+        &#128196; Generate Brief
+      </button>
+
+      <div id="briefPreview" style="display:none;margin-top:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span class="muted small">Generated brief</span>
+          <div style="display:flex;gap:8px">
+            <button class="btn-ghost btn-sm" onclick="copyText('briefText')">&#128203; Copy</button>
+            <button class="btn-ghost btn-sm" onclick="downloadText('briefText','agency-brief.txt')">&#8615; Download</button>
+          </div>
+        </div>
+        <pre id="briefText" class="doc-preview"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Memo Generator -->
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title">&#128231; Inter-Agency Memo</span>
+    </div>
+    <div class="card-body">
+      <div class="form-group">
+        <label>Risk</label>
+        <select id="memoRisk" style="width:100%">
+          <option value="">Select risk…</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Recipient Agency</label>
+        <select id="memoAgency" style="width:100%">
+          <option value="">Select agency…</option>
+        </select>
+      </div>
+      <button class="btn-primary" style="width:100%" onclick="generateMemo()" id="memoBtn">
+        &#9993; Generate Memo
+      </button>
+
+      <div id="memoPreview" style="display:none;margin-top:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span class="muted small" id="memoMeta"></span>
+          <div style="display:flex;gap:8px">
+            <button class="btn-ghost btn-sm" onclick="copyText('memoText')">&#128203; Copy</button>
+            <button class="btn-ghost btn-sm" onclick="downloadText('memoText','inter-agency-memo.txt')">&#8615; Download</button>
+          </div>
+        </div>
+        <pre id="memoText" class="doc-preview"></pre>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── 4. Shared Risk View ────────────────────────────────────────────────── -->
 <div class="card mt16">
   <div class="card-head">
     <span class="card-title">&#128737; Shared Risk View</span>
@@ -56,7 +143,7 @@
   </div>
 </div>
 
-<!-- Agency Modal -->
+<!-- ── Agency Modal ───────────────────────────────────────────────────────── -->
 <div class="modal-bg" id="agencyModal">
   <div class="modal" style="max-width:480px">
     <div class="modal-head">
@@ -70,9 +157,10 @@
       <div class="form-row">
         <div class="form-group"><label>Type</label>
           <select id="aType">
+            <option value="Government">Government</option>
+            <option value="Regulator">Regulator</option>
             <option value="Internal">Internal</option>
             <option value="External">External</option>
-            <option value="Regulator">Regulator</option>
           </select>
         </div>
         <div class="form-group"><label>Risk Sharing Level</label>
@@ -98,83 +186,260 @@
     </div>
   </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
+<style>
+.doc-preview {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  max-height: 420px;
+  overflow-y: auto;
+  color: var(--text);
+}
+.matrix-wrap   { overflow-x: auto; }
+.matrix-table  { min-width: 600px; }
+.matrix-cat    { font-size: 11px; max-width: 100px; white-space: normal; text-align: center; }
+.matrix-cell   { text-align: center; color: var(--muted); font-size: 13px; }
+.matrix-cell.c1 { background: #fef3c7; color: #92400e; font-weight: 600; }
+.matrix-cell.c2 { background: #fed7aa; color: #7c2d12; font-weight: 700; }
+.matrix-cell.c3 { background: #fecaca; color: #7f1d1d; font-weight: 700; }
+.sharing-badge       { font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 600; }
+.sharing-badge.full    { background: #dcfce7; color: #166534; }
+.sharing-badge.summary { background: #fef9c3; color: #713f12; }
+.sharing-badge.none    { background: #f3f4f6; color: #6b7280; }
+.risk-check-item { display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer; }
+.risk-check-item:hover { background: var(--surface-alt); }
+.risk-check-item label { cursor:pointer;font-size:13px;flex:1 }
+.risk-check-item .score-chip {
+  font-size:11px;padding:1px 6px;border-radius:10px;
+  background:var(--border);color:var(--muted);
+}
+</style>
 <script>
 let agencies = [];
+let allRisks = [];
 
+/* ── Utility ──────────────────────────────────────────────────────────────── */
+function scoreLevel(s) { return s>=13?'high':s>=6?'medium':'low'; }
+
+function copyText(id) {
+  const txt = document.getElementById(id).textContent;
+  navigator.clipboard.writeText(txt).then(() => showToast('Copied to clipboard','success'));
+}
+
+function downloadText(id, filename) {
+  const txt = document.getElementById(id).textContent;
+  const a = document.createElement('a');
+  a.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(txt);
+  a.download = filename;
+  a.click();
+}
+
+/* ── Matrix ───────────────────────────────────────────────────────────────── */
 async function loadMatrix() {
+  const body = document.getElementById('matrixBody');
+  body.innerHTML = '<p class="empty-msg">Loading…</p>';
   try {
-    const data = await fetch('/api/coordination/matrix').then(r=>r.json());
-    const body = document.getElementById('matrixBody');
+    const data = await fetch('/api/coordination/matrix').then(r => r.json());
     if (!data.agencies.length) {
       body.innerHTML = '<p class="empty-msg">No agencies configured yet.</p>';
       return;
     }
-    const cats = data.categories.slice(0,6);
+    const cats = data.categories;
     body.innerHTML = `<div class="matrix-wrap">
       <table class="data-table matrix-table">
         <thead>
-          <tr><th>Agency</th><th>Type</th><th>Sharing</th>${cats.map(c=>`<th class="matrix-cat">${esc(c)}</th>`).join('')}</tr>
+          <tr>
+            <th>Agency</th><th>Type</th><th>Sharing</th><th>Total</th>
+            ${cats.map(c => `<th class="matrix-cat">${esc(c)}</th>`).join('')}
+          </tr>
         </thead>
         <tbody>
-          ${data.agencies.map(a => `
-            <tr>
+          ${data.agencies.map(a => {
+            const row   = data.matrix[a.id] || {};
+            const total = a.shared_risk_count || 0;
+            const sharingClass = (a.risk_sharing_level||'summary').toLowerCase();
+            return `<tr>
               <td class="bold">${esc(a.name)}</td>
-              <td><span class="cat-chip">${esc(a.type)}</span></td>
-              <td><span class="sharing-badge ${(a.risk_sharing_level||'').toLowerCase()}">${esc(a.risk_sharing_level||'Summary')}</span></td>
+              <td><span class="cat-chip">${esc(a.type||'—')}</span></td>
+              <td><span class="sharing-badge ${sharingClass}">${esc(a.risk_sharing_level||'Summary')}</span></td>
+              <td><strong>${total}</strong></td>
               ${cats.map(c => {
-                const count = data.risk_counts[c]||0;
-                const shared = a.risk_sharing_level!=='None' ? count : 0;
-                return `<td class="matrix-cell ${shared>0?'has-risk':''}">${shared>0?shared:''}</td>`;
+                const n = row[c] || 0;
+                const cls = n >= 5 ? 'c3' : n >= 3 ? 'c2' : n >= 1 ? 'c1' : '';
+                return `<td class="matrix-cell ${cls}">${n > 0 ? n : ''}</td>`;
               }).join('')}
-            </tr>`).join('')}
+            </tr>`;
+          }).join('')}
         </tbody>
       </table>
     </div>`;
   } catch(e) {
-    document.getElementById('matrixBody').innerHTML = `<p class="empty-msg error">${esc(e.message)}</p>`;
+    body.innerHTML = `<p class="empty-msg error">${esc(e.message)}</p>`;
   }
 }
 
+/* ── Agency Register ──────────────────────────────────────────────────────── */
 async function loadAgencies() {
   const tbody = document.getElementById('agencyTbody');
-  tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">Loading…</td></tr>';
   try {
-    agencies = await fetch('/api/agencies').then(r=>r.json());
-    document.getElementById('agencyCount').textContent = `${agencies.length} Agenc${agencies.length!==1?'ies':'y'}`;
-    const sel = document.getElementById('agencySelect');
-    sel.innerHTML = '<option value="">Select agency…</option>' +
-      agencies.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('');
+    agencies = await fetch('/api/agencies').then(r => r.json());
+    document.getElementById('agencyCount').textContent =
+      `${agencies.length} Agenc${agencies.length !== 1 ? 'ies' : 'y'}`;
+
+    // Populate dropdowns
+    const agencyOptions = '<option value="">Select agency…</option>' +
+      agencies.map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join('');
+    document.getElementById('agencySelect').innerHTML   = agencyOptions;
+    document.getElementById('briefAgency').innerHTML    = agencyOptions;
+    document.getElementById('memoAgency').innerHTML     = agencyOptions;
 
     if (!agencies.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">No agencies yet — add your first agency.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">No agencies yet.</td></tr>';
       return;
     }
     tbody.innerHTML = agencies.map(a => {
-      const sharingClass = {Full:'high',Summary:'medium',None:'low'}[a.risk_sharing_level]||'low';
+      const sc = (a.risk_sharing_level || 'summary').toLowerCase();
       return `<tr>
         <td class="bold">${esc(a.name)}</td>
-        <td><span class="cat-chip">${esc(a.type||'—')}</span></td>
-        <td class="muted">${esc(a.contact_name||'—')}</td>
-        <td class="muted small">${esc(a.contact_email||'—')}</td>
-        <td><span class="score-bubble ${sharingClass}" style="font-size:11px;padding:3px 8px">${esc(a.risk_sharing_level||'Summary')}</span></td>
+        <td><span class="cat-chip">${esc(a.type || '—')}</span></td>
+        <td class="muted">${esc(a.contact_name || '—')}</td>
+        <td class="muted small">${esc(a.contact_email || '—')}</td>
+        <td><span class="sharing-badge ${sc}">${esc(a.risk_sharing_level || 'Summary')}</span></td>
+        <td class="muted">${a.shared_risk_count !== undefined ? a.shared_risk_count : '—'}</td>
         <td>
           <div class="row-actions">
-            <button class="btn-icon" onclick="openEditAgency(${a.id})">&#9998;</button>
-            <button class="btn-icon danger" onclick="deleteAgency(${a.id})">&#10006;</button>
+            <button class="btn-icon" onclick="openEditAgency(${a.id})" title="Edit">&#9998;</button>
+            <button class="btn-icon danger" onclick="deleteAgency(${a.id})" title="Delete">&#10006;</button>
           </div>
         </td>
       </tr>`;
     }).join('');
   } catch(e) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty-msg error">${esc(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-msg error">${esc(e.message)}</td></tr>`;
   }
 }
 
+/* ── Risk selectors ───────────────────────────────────────────────────────── */
+async function loadRisks() {
+  try {
+    allRisks = await fetch('/api/risks?status=Open').then(r => r.json());
+    // Filter to open only
+    allRisks = allRisks.filter(r => r.status !== 'Closed');
+
+    // Checkbox list for brief
+    const list = document.getElementById('riskCheckboxList');
+    if (!allRisks.length) {
+      list.innerHTML = '<p class="muted small" style="padding:8px 12px">No open risks found.</p>';
+      return;
+    }
+    list.innerHTML = allRisks.map(r => `
+      <div class="risk-check-item">
+        <input type="checkbox" id="rc_${r.id}" value="${r.id}" onchange="updateSelectedCount()">
+        <label for="rc_${r.id}">[${esc(r.risk_id)}] ${esc(r.title)}</label>
+        <span class="score-chip">${r.risk_score}</span>
+      </div>`).join('');
+    updateSelectedCount();
+
+    // Select for memo
+    document.getElementById('memoRisk').innerHTML =
+      '<option value="">Select risk…</option>' +
+      allRisks.map(r => `<option value="${r.id}">[${esc(r.risk_id)}] ${esc(r.title.slice(0,60))}</option>`).join('');
+  } catch(e) {
+    console.error('loadRisks:', e);
+  }
+}
+
+function selectAllRisks(checked) {
+  document.querySelectorAll('#riskCheckboxList input[type=checkbox]')
+    .forEach(cb => cb.checked = checked);
+  updateSelectedCount();
+}
+
+function updateSelectedCount() {
+  const n = document.querySelectorAll('#riskCheckboxList input:checked').length;
+  document.getElementById('selectedCount').textContent = n ? `${n} selected` : '';
+}
+
+/* ── Brief Generator ──────────────────────────────────────────────────────── */
+async function generateBrief() {
+  const agencyId = document.getElementById('briefAgency').value;
+  const riskIds  = [...document.querySelectorAll('#riskCheckboxList input:checked')]
+                     .map(cb => parseInt(cb.value));
+  if (!agencyId)        { showToast('Select an agency','error'); return; }
+  if (!riskIds.length)  { showToast('Select at least one risk','error'); return; }
+
+  const btn = document.getElementById('briefBtn');
+  btn.disabled = true;
+  btn.textContent = 'Generating…';
+  document.getElementById('briefPreview').style.display = 'none';
+
+  try {
+    const resp = await fetch('/api/coordination/brief', {
+      method:  'POST',
+      headers: {'Content-Type':'application/json'},
+      body:    JSON.stringify({ agency_id: agencyId, risk_ids: riskIds })
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+
+    document.getElementById('briefText').textContent = data.brief_text;
+    document.getElementById('briefPreview').style.display = 'block';
+    showToast(`Brief generated for ${data.agency}`, 'success');
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = '📄 Generate Brief';
+  }
+}
+
+/* ── Memo Generator ───────────────────────────────────────────────────────── */
+async function generateMemo() {
+  const riskId   = document.getElementById('memoRisk').value;
+  const agencyId = document.getElementById('memoAgency').value;
+  if (!riskId)   { showToast('Select a risk','error'); return; }
+  if (!agencyId) { showToast('Select a recipient agency','error'); return; }
+
+  const btn = document.getElementById('memoBtn');
+  btn.disabled    = true;
+  btn.textContent = 'Generating…';
+  document.getElementById('memoPreview').style.display = 'none';
+
+  try {
+    const resp = await fetch('/api/coordination/memo', {
+      method:  'POST',
+      headers: {'Content-Type':'application/json'},
+      body:    JSON.stringify({ risk_id: riskId, agency_id: agencyId })
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+
+    document.getElementById('memoText').textContent  = data.memo_text;
+    document.getElementById('memoMeta').textContent  =
+      `${data.risk_id} → ${data.agency}`;
+    document.getElementById('memoPreview').style.display = 'block';
+    showToast('Memo generated', 'success');
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = '✉ Generate Memo';
+  }
+}
+
+/* ── Shared Risk View ─────────────────────────────────────────────────────── */
 async function loadSharedRisks() {
-  const id = document.getElementById('agencySelect').value;
+  const id    = document.getElementById('agencySelect').value;
   const tbody = document.getElementById('sharedRisksTbody');
   if (!id) {
     tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">Select an agency.</td></tr>';
@@ -182,13 +447,13 @@ async function loadSharedRisks() {
   }
   tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">Loading…</td></tr>';
   try {
-    const data = await fetch(`/api/coordination/shared-risks?agency_id=${id}`).then(r=>r.json());
+    const data = await fetch(`/api/coordination/shared-risks?agency_id=${id}`).then(r => r.json());
     if (!data.risks.length) {
       tbody.innerHTML = '<tr><td colspan="6" class="empty-msg">No risks to share with this agency.</td></tr>';
       return;
     }
     tbody.innerHTML = data.risks.map(r => {
-      const lv = scoreLevel(r.risk_score||0);
+      const lv = scoreLevel(r.risk_score || 0);
       return `<tr>
         <td><span class="risk-id-tag">${esc(r.risk_id||'—')}</span></td>
         <td>${esc(r.title||'—')}</td>
@@ -203,25 +468,26 @@ async function loadSharedRisks() {
   }
 }
 
+/* ── Agency Modal ─────────────────────────────────────────────────────────── */
 function openAgencyModal() {
   document.getElementById('editAgencyId').value = '';
   document.getElementById('agencyModalTitle').textContent = 'Add Agency';
   ['aName','aContact','aEmail'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('aType').value = 'External';
+  document.getElementById('aType').value    = 'Government';
   document.getElementById('aSharing').value = 'Summary';
   document.getElementById('agencyModal').classList.add('open');
 }
 
 function openEditAgency(id) {
-  const a = agencies.find(x=>x.id===id);
+  const a = agencies.find(x => x.id === id);
   if (!a) return;
   document.getElementById('editAgencyId').value = a.id;
   document.getElementById('agencyModalTitle').textContent = 'Edit Agency';
-  document.getElementById('aName').value    = a.name||'';
-  document.getElementById('aType').value   = a.type||'External';
-  document.getElementById('aSharing').value= a.risk_sharing_level||'Summary';
-  document.getElementById('aContact').value= a.contact_name||'';
-  document.getElementById('aEmail').value  = a.contact_email||'';
+  document.getElementById('aName').value    = a.name || '';
+  document.getElementById('aType').value    = a.type || 'Government';
+  document.getElementById('aSharing').value = a.risk_sharing_level || 'Summary';
+  document.getElementById('aContact').value = a.contact_name || '';
+  document.getElementById('aEmail').value   = a.contact_email || '';
   document.getElementById('agencyModal').classList.add('open');
 }
 
@@ -230,33 +496,40 @@ async function saveAgency() {
   const name = document.getElementById('aName').value.trim();
   if (!name) { showToast('Agency name is required','error'); return; }
   const body = {
-    name, type: document.getElementById('aType').value,
+    name,
+    type:               document.getElementById('aType').value,
     risk_sharing_level: document.getElementById('aSharing').value,
-    contact_name:  document.getElementById('aContact').value.trim(),
-    contact_email: document.getElementById('aEmail').value.trim(),
+    contact_name:       document.getElementById('aContact').value.trim(),
+    contact_email:      document.getElementById('aEmail').value.trim(),
   };
   const url    = id ? `/api/agencies/${id}` : '/api/agencies';
   const method = id ? 'PUT' : 'POST';
   try {
-    const resp = await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const resp = await fetch(url, {
+      method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
     const data = await resp.json();
     if (data.error) throw new Error(data.error);
     closeModal('agencyModal');
-    showToast(id?'Agency updated':'Agency added','success');
+    showToast(id ? 'Agency updated' : 'Agency added', 'success');
     loadAgencies();
     loadMatrix();
-  } catch(e) { showToast(e.message,'error'); }
+  } catch(e) {
+    showToast(e.message, 'error');
+  }
 }
 
 async function deleteAgency(id) {
   if (!confirm('Delete this agency?')) return;
-  await fetch(`/api/agencies/${id}`,{method:'DELETE'});
-  showToast('Agency deleted','success');
+  await fetch(`/api/agencies/${id}`, { method: 'DELETE' });
+  showToast('Agency deleted', 'success');
   loadAgencies();
   loadMatrix();
 }
 
+/* ── Init ─────────────────────────────────────────────────────────────────── */
 loadMatrix();
 loadAgencies();
+loadRisks();
 </script>
 {% endblock %}
