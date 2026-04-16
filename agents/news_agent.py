@@ -46,7 +46,7 @@ def list_news():
 
 
 @news_bp.route("/api/news/fetch", methods=["POST"])
-def fetch_news():
+def api_fetch_news():
     if not NEWSAPI_KEY:
         return jsonify(error="NEWSAPI_KEY not configured. Add it in Vercel → Settings → Environment Variables."), 500
 
