@@ -424,7 +424,83 @@ def fetch_news(topics_list=None):
 def analyze_relevance(news_items):
     """Score each news item for DCT risk relevance using Claude Haiku.
     Returns: list of scored news items, filtered to relevance >= 4"""
-    pass
+    if not news_items:
+        return []
+
+    # Build batch summary for single Haiku call
+    headlines_block = "\n".join([
+        f"{i}. [{item['source']}] {item['headline']} — {item.get('description','')[:120]}"
+        for i, item in enumerate(news_items)
+    ])
+
+    try:
+        resp = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=2000,
+            messages=[{"role": "user", "content": f"""You are a risk analyst for DCT Abu Dhabi, which manages museums, cultural venues, and large public events.
+
+Score each news item for relevance to DCT's risk management.
+
+NEWS ITEMS:
+{headlines_block}
+
+For EACH item return a JSON object. Return ONLY a valid JSON array:
+[
+  {{
+    "index": 0,
+    "relevance_score": 1-10,
+    "urgency": "Monitor|Elevated|Immediate",
+    "risk_categories": ["Safety","Operational","Financial","Reputational","Compliance","Strategic"],
+    "one_line_insight": "One specific sentence on the DCT risk implication — be concrete, reference the actual news content"
+  }}
+]
+
+Scoring guide:
+9-10: Direct immediate threat to DCT operations or events
+7-8: High relevance, likely affects upcoming DCT activities
+5-6: Moderate relevance, worth monitoring
+3-4: Low relevance, background awareness only
+1-2: Not relevant to DCT risk management
+
+Urgency guide:
+Immediate: Requires action within 24 hours
+Elevated: Monitor closely, action may be needed within 7 days
+Monitor: Background awareness, no immediate action needed
+
+JSON array only. No explanation."""}]
+        )
+
+        raw = resp.content[0].text.strip()
+        if raw.startswith('```'):
+            raw = raw.split('```')[1]
+            if raw.startswith('json'):
+                raw = raw[4:]
+        scores = json.loads(raw.strip())
+
+        # Merge scores back into news items
+        scored_items = []
+        for score_obj in scores:
+            idx = score_obj.get('index', 0)
+            if idx < len(news_items) and score_obj.get('relevance_score', 0) >= 4:
+                item = news_items[idx].copy()
+                item['relevance_score'] = score_obj.get('relevance_score', 0)
+                item['urgency'] = score_obj.get('urgency', 'Monitor')
+                item['risk_categories'] = score_obj.get('risk_categories', [])
+                item['one_line_insight'] = score_obj.get('one_line_insight', '')
+                scored_items.append(item)
+
+        # Sort by relevance descending
+        scored_items.sort(key=lambda x: x['relevance_score'], reverse=True)
+        print(f">> Relevance analysis: {len(scored_items)}/{len(news_items)} items passed threshold")
+        return scored_items
+
+    except Exception as e:
+        print(f">> Relevance analysis error: {e}")
+        # Return all items with default scores on failure
+        return [{**item, 'relevance_score': 5, 'urgency': 'Monitor',
+                 'risk_categories': ['Operational'],
+                 'one_line_insight': 'Manual review required.'}
+                for item in news_items]
 
 
 def map_to_risks(high_relevance_items, db_connection):
