@@ -1,60 +1,149 @@
 {% extends "base.html" %}
-{% block title %}Document Ingestion · DCT Risk Intelligence{% endblock %}
-{% block page_title %}Document Ingestion{% endblock %}
-{% block page_sub %}Upload risk registers, policies, and incident reports for AI-powered risk extraction{% endblock %}
+{% block title %}Document Ingestion Agent · DCT Risk Intelligence{% endblock %}
+{% block page_title %}Document Ingestion Agent{% endblock %}
+{% block page_sub %}Upload risk registers, policies, and incident reports for AI-powered extraction and reconciliation{% endblock %}
+
+{% block top_actions %}
+  <button class="btn-ghost btn-sm" onclick="loadDocuments()">&#8635; Refresh Library</button>
+{% endblock %}
 
 {% block content %}
-<!-- Upload Card -->
+
+<!-- ═══ SECTION 1: Upload Zone ═══ -->
 <div class="card">
-  <div class="card-head"><span class="card-title">&#128196; Upload Document</span></div>
+  <div class="card-head">
+    <span class="card-title">&#128196; Upload Documents</span>
+    <span class="muted small">PDF · DOCX · XLSX · TXT</span>
+  </div>
   <div class="card-body">
+
     <div class="upload-zone" id="uploadZone"
          ondragover="event.preventDefault();this.classList.add('drag-over')"
          ondragleave="this.classList.remove('drag-over')"
-         ondrop="handleDrop(event)">
-      <div class="upload-ico">&#8593;</div>
-      <p class="upload-msg">Drag &amp; drop a file or <label for="fileInput" class="upload-link">browse</label></p>
-      <p class="upload-hint">PDF · DOCX · XLSX · CSV · TXT &nbsp;|&nbsp; Max 16 MB</p>
-      <input type="file" id="fileInput" accept=".pdf,.docx,.xlsx,.csv,.txt" style="display:none" onchange="handleFile(this.files[0])">
+         ondrop="handleDrop(event)"
+         onclick="document.getElementById('fileInput').click()"
+         style="cursor:pointer">
+      <div class="upload-ico" style="font-size:2rem;margin-bottom:8px">&#8679;</div>
+      <p class="upload-msg">Drag &amp; drop files here or <span class="upload-link">click to browse</span></p>
+      <p class="upload-hint">Accepted: PDF &nbsp;·&nbsp; DOCX &nbsp;·&nbsp; XLSX &nbsp;·&nbsp; TXT &nbsp;|&nbsp; Max 16 MB per file</p>
+      <input type="file" id="fileInput" accept=".pdf,.docx,.xlsx,.txt" multiple
+             style="display:none" onchange="handleFiles(this.files)">
     </div>
-    <div id="uploadForm" style="display:none;margin-top:16px">
-      <div class="form-row" style="align-items:flex-end">
-        <div class="form-group flex-1">
-          <label>Document Type</label>
-          <select id="docType">
-            <option value="risk_register">Risk Register</option>
-            <option value="policy">Policy Document</option>
-            <option value="procedure">Procedure</option>
-            <option value="lesson_learned">Lesson Learned</option>
-            <option value="incident_report">Incident Report</option>
-          </select>
-        </div>
-        <div class="form-group flex-2">
-          <label>Selected File</label>
-          <div class="file-chip" id="fileChip">—</div>
-        </div>
-        <div class="form-group">
-          <button class="btn-primary" onclick="uploadFile()">&#8593; Upload</button>
-          <button class="btn-ghost" onclick="cancelUpload()">Cancel</button>
-        </div>
+
+    <!-- File list (hidden until files selected) -->
+    <div id="fileListSection" style="display:none;margin-top:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span class="card-title" style="font-size:.9rem">Selected Files</span>
+        <button class="btn-ghost btn-sm" onclick="clearFiles()">&#10005; Clear</button>
       </div>
-      <div id="uploadProgress" style="display:none" class="progress-row">
-        <div class="spinner sm"></div><span>Uploading…</span>
-      </div>
+      <ul id="fileItems" style="list-style:none;padding:0;margin:0 0 16px"></ul>
+      <button id="processBtn" class="btn-primary" onclick="processAllFiles()" disabled>
+        &#9889; Process Documents
+      </button>
     </div>
+
   </div>
 </div>
 
-<!-- Documents List -->
+<!-- ═══ SECTION 2: Processing Status (hidden until processing starts) ═══ -->
+<div id="processingSection" class="card mt16" style="display:none">
+  <div class="card-head">
+    <span class="card-title">&#8987; Processing</span>
+    <span class="muted small" id="processingCount"></span>
+  </div>
+  <div class="card-body">
+    <div id="statusCards"></div>
+  </div>
+</div>
+
+<!-- ═══ SECTION 3: Results (hidden until processing completes) ═══ -->
+<div id="resultsSection" class="card mt16" style="display:none">
+  <div class="card-head" style="flex-direction:column;align-items:flex-start;gap:12px">
+    <span class="card-title">&#10003; Extraction Results</span>
+    <div style="display:flex;gap:0;border-bottom:2px solid var(--border-col,#e5e7eb);width:100%">
+      <button class="ing-tab active" id="tabBtnRisks"    onclick="switchResultTab('risks')">
+        Extracted Risks <span class="ing-tab-badge" id="badgeRisks">0</span>
+      </button>
+      <button class="ing-tab" id="tabBtnLessons"  onclick="switchResultTab('lessons')">
+        Lessons Learned <span class="ing-tab-badge" id="badgeLessons">0</span>
+      </button>
+      <button class="ing-tab" id="tabBtnRecon"    onclick="switchResultTab('reconciliation')">
+        Reconciliation Report
+      </button>
+    </div>
+  </div>
+
+  <!-- Extracted Risks tab -->
+  <div id="tab-risks" class="card-body p0">
+    <div style="display:flex;justify-content:flex-end;padding:10px 16px;border-bottom:1px solid var(--border-col,#e5e7eb)">
+      <button class="btn-primary btn-sm" onclick="addAllNewRisks()">&#43; Add All New Risks</button>
+    </div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Source Doc</th>
+          <th>Category</th>
+          <th>Title</th>
+          <th>Description</th>
+          <th style="text-align:center">L</th>
+          <th style="text-align:center">I</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="risksTableBody">
+        <tr><td colspan="7" class="empty-msg">No risks extracted yet.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Lessons Learned tab -->
+  <div id="tab-lessons" class="card-body" style="display:none">
+    <div id="lessonCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px">
+      <p class="muted">No lessons learned extracted yet.</p>
+    </div>
+  </div>
+
+  <!-- Reconciliation Report tab -->
+  <div id="tab-reconciliation" class="card-body" style="display:none">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px">
+      <div id="reconNew"  style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:20px;text-align:center">
+        <div style="font-size:2rem;font-weight:700;color:#16a34a" id="reconNewCount">0</div>
+        <div style="font-weight:600;color:#15803d">New Risks</div>
+        <div class="muted small">Not in register</div>
+      </div>
+      <div id="reconDup"  style="background:#fefce8;border:1px solid #fde047;border-radius:8px;padding:20px;text-align:center">
+        <div style="font-size:2rem;font-weight:700;color:#ca8a04" id="reconDupCount">0</div>
+        <div style="font-weight:600;color:#a16207">Duplicates</div>
+        <div class="muted small">Already in register</div>
+      </div>
+      <div id="reconUpd"  style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:20px;text-align:center">
+        <div style="font-size:2rem;font-weight:700;color:#2563eb" id="reconUpdCount">0</div>
+        <div style="font-weight:600;color:#1d4ed8">Updates</div>
+        <div class="muted small">Existing with new info</div>
+      </div>
+    </div>
+    <div id="reconSummaryText" class="muted" style="font-style:italic;padding:12px;background:#f9fafb;border-radius:6px;border-left:3px solid #6b7280"></div>
+  </div>
+</div>
+
+<!-- ═══ SECTION 4: Document Library (always visible) ═══ -->
 <div class="card mt16">
   <div class="card-head">
-    <span class="card-title" id="docCount">Ingested Documents</span>
+    <span class="card-title" id="docLibTitle">Ingested Documents</span>
     <button class="btn-ghost btn-sm" onclick="loadDocuments()">&#8635; Refresh</button>
   </div>
   <div class="card-body p0">
     <table class="data-table">
       <thead>
-        <tr><th>Filename</th><th>Type</th><th>Uploaded</th><th>Status</th><th>Risks Extracted</th><th>Summary</th><th>Actions</th></tr>
+        <tr>
+          <th>Filename</th>
+          <th>Type</th>
+          <th>Date</th>
+          <th style="text-align:center">Risks Extracted</th>
+          <th>Summary</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
       </thead>
       <tbody id="docTbody">
         <tr><td colspan="7" class="empty-msg">Loading documents…</td></tr>
@@ -63,94 +152,401 @@
   </div>
 </div>
 
-<!-- Progress Modal -->
-<div class="modal-bg" id="processModal">
-  <div class="modal" style="max-width:420px;text-align:center">
-    <div class="modal-body" style="padding:40px">
-      <div class="spinner lg" style="margin:0 auto 20px"></div>
-      <h3>Processing Document</h3>
-      <p class="muted" id="processMsg">Claude is extracting risks from your document…</p>
-    </div>
-  </div>
-</div>
 {% endblock %}
 
 {% block scripts %}
-<script>
-let selectedFile = null;
+<style>
+  /* Inline styles for components not yet in style.css */
+  .ing-tab {
+    background: none; border: none; padding: 8px 18px;
+    font-size: .875rem; font-weight: 500; cursor: pointer;
+    color: #6b7280; border-bottom: 2px solid transparent;
+    margin-bottom: -2px; transition: color .15s, border-color .15s;
+  }
+  .ing-tab:hover { color: #111827; }
+  .ing-tab.active { color: #2563eb; border-bottom-color: #2563eb; }
+  .ing-tab-badge {
+    display: inline-block; background: #e5e7eb; color: #374151;
+    border-radius: 9999px; font-size: .7rem; font-weight: 700;
+    padding: 1px 7px; margin-left: 5px;
+  }
+  .ing-tab.active .ing-tab-badge { background: #dbeafe; color: #1d4ed8; }
 
+  .status-card {
+    display: flex; align-items: center; gap: 16px;
+    border: 1px solid #e5e7eb; border-radius: 8px;
+    padding: 14px 16px; margin-bottom: 10px; background: #fff;
+  }
+  .status-steps { display: flex; gap: 6px; flex-wrap: wrap; }
+  .status-step {
+    font-size: .7rem; font-weight: 600; padding: 3px 10px;
+    border-radius: 9999px; background: #f3f4f6; color: #9ca3af;
+    transition: background .3s, color .3s;
+  }
+  .status-step.active { background: #dbeafe; color: #1d4ed8; }
+  .status-step.done   { background: #dcfce7; color: #16a34a; }
+
+  .file-list-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 12px; background: #f9fafb; border-radius: 6px;
+    border: 1px solid #e5e7eb; margin-bottom: 6px; font-size: .875rem;
+  }
+  .file-list-item .file-name { font-weight: 500; }
+  .file-list-item .file-size { color: #6b7280; font-size: .8rem; }
+
+  .lesson-card {
+    border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px;
+    background: #fff;
+  }
+  .lesson-card .lesson-event { font-weight: 700; font-size: .85rem; color: #374151; margin-bottom: 6px; }
+  .lesson-card .lesson-body  { font-size: .85rem; color: #4b5563; margin-bottom: 10px; }
+  .lesson-card .lesson-action { font-size: .8rem; color: #6b7280; font-style: italic; }
+
+  tr.row-new  { background: #fff; }
+  tr.row-dup  { background: #fefce8; }
+  tr.row-upd  { background: #eff6ff; }
+</style>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let selectedFiles = [];
+let allExtractedRisks   = [];
+let allExtractedLessons = [];
+let lastReconciliation  = {};
+
+// ── Section 1: File selection ─────────────────────────────────────────────────
 function handleDrop(e) {
   e.preventDefault();
   document.getElementById('uploadZone').classList.remove('drag-over');
-  handleFile(e.dataTransfer.files[0]);
+  handleFiles(e.dataTransfer.files);
 }
 
-function handleFile(file) {
-  if (!file) return;
-  selectedFile = file;
-  document.getElementById('fileChip').textContent = `${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`;
-  document.getElementById('uploadForm').style.display = 'block';
+function handleFiles(files) {
+  const allowed = ['pdf','docx','xlsx','txt'];
+  for (const f of files) {
+    const ext = f.name.split('.').pop().toLowerCase();
+    if (!allowed.includes(ext)) {
+      showToast(`${f.name}: unsupported type`, 'error');
+      continue;
+    }
+    if (!selectedFiles.find(x => x.name === f.name)) {
+      selectedFiles.push(f);
+    }
+  }
+  renderFileList();
 }
 
-function cancelUpload() {
-  selectedFile = null;
-  document.getElementById('uploadForm').style.display = 'none';
+function renderFileList() {
+  const list = document.getElementById('fileItems');
+  const sec  = document.getElementById('fileListSection');
+  const btn  = document.getElementById('processBtn');
+  if (!selectedFiles.length) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  btn.disabled = false;
+  list.innerHTML = selectedFiles.map((f, i) => `
+    <li class="file-list-item">
+      <div>
+        <span class="file-name">&#128196; ${esc(f.name)}</span>
+        <span class="file-size"> &mdash; ${(f.size/1024).toFixed(1)} KB</span>
+      </div>
+      <button class="btn-icon" onclick="removeFile(${i})">&#10005;</button>
+    </li>`).join('');
+}
+
+function removeFile(i) {
+  selectedFiles.splice(i, 1);
+  renderFileList();
+}
+
+function clearFiles() {
+  selectedFiles = [];
   document.getElementById('fileInput').value = '';
+  renderFileList();
 }
 
-async function uploadFile() {
-  if (!selectedFile) return;
-  const docType = document.getElementById('docType').value;
-  const fd = new FormData();
-  fd.append('file', selectedFile);
-  fd.append('doc_type', docType);
+// ── Section 2: Processing with animated steps ─────────────────────────────────
+const STEPS = ['Uploading','Reading','Classifying','Extracting','Reconciling','Done'];
 
-  document.getElementById('uploadProgress').style.display = 'flex';
-  document.querySelector('#uploadForm .btn-primary').disabled = true;
+function buildStatusCard(filename) {
+  const id = 'card-' + filename.replace(/[^a-z0-9]/gi, '_');
+  const stepsHtml = STEPS.map((s, i) =>
+    `<span class="status-step${i===0?' active':''}" id="${id}-step-${i}">${s}</span>`
+  ).join('');
+  return `
+    <div class="status-card" id="${id}">
+      <div style="min-width:160px;font-weight:600;font-size:.875rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+           title="${esc(filename)}">${esc(filename)}</div>
+      <div class="status-steps">${stepsHtml}</div>
+    </div>`;
+}
 
-  try {
-    const resp = await fetch('/api/ingest', {method:'POST', body:fd});
-    const data = await resp.json();
-    if (data.error) throw new Error(data.error);
-    cancelUpload();
-    showToast(`Uploaded: ${data.filename}`, 'success');
-    loadDocuments();
-  } catch(e) {
-    showToast(e.message, 'error');
-  } finally {
-    document.getElementById('uploadProgress').style.display = 'none';
-    const btn = document.querySelector('#uploadForm .btn-primary');
-    if (btn) btn.disabled = false;
+function advanceStep(filename, step) {
+  const id = 'card-' + filename.replace(/[^a-z0-9]/gi, '_');
+  for (let i = 0; i < STEPS.length; i++) {
+    const el = document.getElementById(`${id}-step-${i}`);
+    if (!el) continue;
+    if (i < step)       { el.className = 'status-step done'; }
+    else if (i === step){ el.className = 'status-step active'; }
+    else                { el.className = 'status-step'; }
   }
 }
 
+async function processAllFiles() {
+  if (!selectedFiles.length) return;
+  document.getElementById('processBtn').disabled = true;
+
+  // Show processing section
+  const procSec   = document.getElementById('processingSection');
+  const cardsCont = document.getElementById('statusCards');
+  procSec.style.display = 'block';
+  document.getElementById('processingCount').textContent =
+    `${selectedFiles.length} file${selectedFiles.length!==1?'s':''}`;
+  cardsCont.innerHTML = selectedFiles.map(f => buildStatusCard(f.name)).join('');
+  procSec.scrollIntoView({behavior:'smooth', block:'start'});
+
+  allExtractedRisks   = [];
+  allExtractedLessons = [];
+  lastReconciliation  = {new:[], duplicates:[], updates:[], report_summary:''};
+
+  for (const file of selectedFiles) {
+    await processSingleFile(file);
+  }
+
+  renderResults();
+  clearFiles();
+  loadDocuments();
+}
+
+async function processSingleFile(file) {
+  const name = file.name;
+
+  // Step 0: Uploading
+  advanceStep(name, 0);
+  let filepath;
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const up = await fetch('/api/ingest/upload', {method:'POST', body:fd});
+    const upData = await up.json();
+    if (upData.error) throw new Error(upData.error);
+    filepath = upData.filepath;
+  } catch(e) {
+    showToast(`Upload failed: ${e.message}`, 'error');
+    advanceStep(name, 6); // mark done-ish
+    return;
+  }
+
+  // Animate steps 1-4 with staggered timeouts while API call is in flight
+  advanceStep(name, 1); // Reading
+  const stepTimers = [
+    setTimeout(() => advanceStep(name, 2), 1800),  // Classifying
+    setTimeout(() => advanceStep(name, 3), 3800),  // Extracting
+    setTimeout(() => advanceStep(name, 4), 6500),  // Reconciling
+  ];
+
+  try {
+    const resp = await fetch('/api/ingest/process', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({filepath})
+    });
+    const data = await resp.json();
+    stepTimers.forEach(clearTimeout);
+
+    if (data.error) throw new Error(data.error);
+
+    // Merge results
+    const risks   = data.extracted?.risks   || [];
+    const lessons = data.extracted?.lessons || [];
+    const recon   = data.reconciliation     || {};
+
+    allExtractedRisks.push(...risks);
+    allExtractedLessons.push(...lessons);
+
+    // Merge reconciliation counts
+    lastReconciliation.new.push(...(recon.new || []));
+    lastReconciliation.duplicates.push(...(recon.duplicates || []));
+    lastReconciliation.updates.push(...(recon.updates || []));
+    if (recon.report_summary) {
+      lastReconciliation.report_summary +=
+        (lastReconciliation.report_summary ? ' | ' : '') + recon.report_summary;
+    }
+
+    advanceStep(name, 5); // Done
+
+  } catch(e) {
+    stepTimers.forEach(clearTimeout);
+    advanceStep(name, 5);
+    showToast(`Processing failed (${name}): ${e.message}`, 'error');
+  }
+}
+
+// ── Section 3: Render results tabs ───────────────────────────────────────────
+function renderResults() {
+  const sec = document.getElementById('resultsSection');
+  sec.style.display = 'block';
+  sec.scrollIntoView({behavior:'smooth', block:'start'});
+
+  renderRisksTab();
+  renderLessonsTab();
+  renderReconciliationTab();
+  switchResultTab('risks');
+}
+
+function switchResultTab(name) {
+  ['risks','lessons','reconciliation'].forEach(t => {
+    document.getElementById('tab-' + t).style.display = t === name ? '' : 'none';
+    const btn = document.getElementById('tabBtn' + t.charAt(0).toUpperCase() + t.slice(1));
+    if (btn) btn.classList.toggle('active', t === name);
+  });
+}
+
+// Extracted Risks
+function renderRisksTab() {
+  document.getElementById('badgeRisks').textContent = allExtractedRisks.length;
+  const tbody = document.getElementById('risksTableBody');
+  if (!allExtractedRisks.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">No risks extracted.</td></tr>';
+    return;
+  }
+
+  // Map risks to their reconciliation category
+  const dupTitles = new Set((lastReconciliation.duplicates||[]).map(r => r.title));
+  const updTitles = new Set((lastReconciliation.updates||[]).map(r => r.title));
+
+  tbody.innerHTML = allExtractedRisks.map((r, i) => {
+    let rowClass = 'row-new';
+    if (dupTitles.has(r.title)) rowClass = 'row-dup';
+    else if (updTitles.has(r.title)) rowClass = 'row-upd';
+    const l = r.likelihood ?? '—';
+    const impact = r.impact ?? '—';
+    return `<tr class="${rowClass}" id="risk-row-${i}">
+      <td class="small muted">${esc(r.source_doc||'—')}</td>
+      <td><span class="cat-chip">${esc(r.category||'—')}</span></td>
+      <td class="bold">${esc(r.title||'—')}</td>
+      <td class="small">${esc((r.description||'').slice(0,120))}${(r.description||'').length>120?'…':''}</td>
+      <td style="text-align:center">${l}</td>
+      <td style="text-align:center">${impact}</td>
+      <td>
+        <div class="row-actions">
+          <button class="btn-sm btn-primary" onclick="addRisk(${i})">+ Register</button>
+          <button class="btn-sm btn-ghost"   onclick="skipRisk(${i})">Skip</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function addRisk(i) {
+  const risk = allExtractedRisks[i];
+  if (!risk) return;
+  try {
+    const resp = await fetch('/api/ingest/add-risk', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(risk)
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    showToast(`Added: ${data.risk_id}`, 'success');
+    const row = document.getElementById('risk-row-' + i);
+    if (row) row.style.opacity = '.35';
+  } catch(e) {
+    showToast(e.message, 'error');
+  }
+}
+
+function skipRisk(i) {
+  const row = document.getElementById('risk-row-' + i);
+  if (row) row.style.display = 'none';
+}
+
+async function addAllNewRisks() {
+  const newRisks = allExtractedRisks.filter((_, i) => {
+    const row = document.getElementById('risk-row-' + i);
+    return row && row.classList.contains('row-new') && row.style.opacity !== '.35';
+  });
+  if (!newRisks.length) { showToast('No new risks to add', 'info'); return; }
+  let added = 0;
+  for (let i = 0; i < allExtractedRisks.length; i++) {
+    const row = document.getElementById('risk-row-' + i);
+    if (row && row.classList.contains('row-new') && row.style.opacity !== '.35') {
+      await addRisk(i);
+      added++;
+    }
+  }
+  showToast(`Added ${added} risks to register`, 'success');
+}
+
+// Lessons Learned
+function renderLessonsTab() {
+  document.getElementById('badgeLessons').textContent = allExtractedLessons.length;
+  const cont = document.getElementById('lessonCards');
+  if (!allExtractedLessons.length) {
+    cont.innerHTML = '<p class="muted">No lessons learned extracted.</p>';
+    return;
+  }
+  cont.innerHTML = allExtractedLessons.map((l, i) => `
+    <div class="lesson-card">
+      <div class="lesson-event">&#127979; ${esc(l.event_name || 'Unknown Event')}</div>
+      <div class="lesson-body">
+        <strong>${esc(l.lesson_title || l.what_happened?.slice(0,60) || '—')}</strong><br>
+        ${esc((l.what_happened||'').slice(0,100))}${(l.what_happened||'').length>100?'…':''}
+      </div>
+      <div class="lesson-action">&#10003; ${esc((l.corrective_action||'No corrective action recorded').slice(0,120))}</div>
+      <div style="margin-top:12px">
+        <button class="btn-sm btn-ghost" onclick="linkLessonToRisk(${i})">&#128279; Link to Risk</button>
+      </div>
+    </div>`).join('');
+}
+
+function linkLessonToRisk(i) {
+  showToast('Risk linking not yet implemented', 'info');
+}
+
+// Reconciliation Report
+function renderReconciliationTab() {
+  document.getElementById('reconNewCount').textContent = (lastReconciliation.new||[]).length;
+  document.getElementById('reconDupCount').textContent = (lastReconciliation.duplicates||[]).length;
+  document.getElementById('reconUpdCount').textContent = (lastReconciliation.updates||[]).length;
+  document.getElementById('reconSummaryText').textContent =
+    lastReconciliation.report_summary || 'No summary available.';
+}
+
+// ── Section 4: Document Library ───────────────────────────────────────────────
 async function loadDocuments() {
   const tbody = document.getElementById('docTbody');
   tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">Loading…</td></tr>';
   try {
-    const docs = await fetch('/api/documents').then(r=>r.json());
-    document.getElementById('docCount').textContent = `${docs.length} Document${docs.length!==1?'s':''}`;
+    const docs = await fetch('/api/ingest/documents').then(r => r.json());
+    document.getElementById('docLibTitle').textContent =
+      `Ingested Documents (${docs.length})`;
     if (!docs.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">No documents yet — upload your first file.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">No documents yet — upload your first file above.</td></tr>';
       return;
     }
+    const typeLabel = {
+      risk_register:'Risk Register', policy:'Policy', procedure:'Procedure',
+      lesson_learned:'Lesson Learned', incident_report:'Incident Report', other:'Other'
+    };
     tbody.innerHTML = docs.map(d => {
-      const processed = d.processed ? '✅ Processed' : '⏳ Pending';
-      const typeLabel = {risk_register:'Risk Register',policy:'Policy',procedure:'Procedure',lesson_learned:'Lesson Learned',incident_report:'Incident Report'}[d.doc_type]||d.doc_type;
-      const dateStr = d.upload_date ? new Date(d.upload_date).toLocaleDateString('en-GB') : '—';
-      const summary = d.summary ? d.summary.slice(0,80) + (d.summary.length>80?'…':'') : '—';
+      const status  = d.processed
+        ? '<span style="color:#16a34a;font-weight:600">&#10003; Processed</span>'
+        : '<span style="color:#ca8a04">&#9711; Pending</span>';
+      const dateStr = d.upload_date
+        ? new Date(d.upload_date + 'Z').toLocaleDateString('en-GB') : '—';
+      const summary = (d.summary||'').slice(0,80) + ((d.summary||'').length>80?'…':'') || '—';
       return `<tr>
         <td class="bold">${esc(d.filename)}</td>
-        <td><span class="cat-chip">${esc(typeLabel)}</span></td>
+        <td><span class="cat-chip">${esc(typeLabel[d.doc_type]||d.doc_type||'—')}</span></td>
         <td class="muted small">${dateStr}</td>
-        <td>${processed}</td>
-        <td class="num">${d.extracted_risks_count||0}</td>
+        <td style="text-align:center">${d.extracted_risks_count||0}</td>
         <td class="muted small">${esc(summary)}</td>
+        <td>${status}</td>
         <td>
-          <div class="row-actions">
-            ${!d.processed ? `<button class="btn-sm btn-primary" onclick="processDoc(${d.id})">&#9889; Extract Risks</button>` : ''}
-            <button class="btn-icon danger" onclick="deleteDoc(${d.id})">&#10006;</button>
-          </div>
+          <button class="btn-sm btn-ghost" onclick="reprocessDoc('${esc(d.filename)}')">
+            &#8635; Re-process
+          </button>
         </td>
       </tr>`;
     }).join('');
@@ -159,28 +555,25 @@ async function loadDocuments() {
   }
 }
 
-async function processDoc(id) {
-  document.getElementById('processModal').classList.add('open');
+async function reprocessDoc(filename) {
+  const filepath = 'uploads/' + filename;
+  showToast(`Re-processing ${filename}…`, 'info');
   try {
-    const resp = await fetch(`/api/documents/${id}/process`, {method:'POST'});
+    const resp = await fetch('/api/ingest/process', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({filepath})
+    });
     const data = await resp.json();
     if (data.error) throw new Error(data.error);
-    showToast(`Extracted ${data.risks_extracted} risks`, 'success');
+    showToast(`Done — ${(data.extracted?.raw_count||0)} items extracted`, 'success');
     loadDocuments();
   } catch(e) {
     showToast(e.message, 'error');
-  } finally {
-    document.getElementById('processModal').classList.remove('open');
   }
 }
 
-async function deleteDoc(id) {
-  if (!confirm('Delete this document?')) return;
-  await fetch(`/api/documents/${id}`, {method:'DELETE'});
-  showToast('Document deleted', 'success');
-  loadDocuments();
-}
-
+// ── Init ──────────────────────────────────────────────────────────────────────
 loadDocuments();
 </script>
 {% endblock %}
