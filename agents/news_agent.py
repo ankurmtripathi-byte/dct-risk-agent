@@ -518,4 +518,28 @@ def generate_risk_bulletin(analyzed_items):
 def get_refresh_status(db_connection):
     """Return last refresh timestamp and item counts from DB.
     Returns: dict {last_refresh, items_last_48h, high_relevance, risks_updated}"""
-    pass
+    cursor = db_connection.cursor()
+    try:
+        cutoff_48h = (datetime.now() - timedelta(hours=48)).isoformat()
+
+        cursor.execute("SELECT COUNT(*) FROM news_items WHERE fetched_date > ?", (cutoff_48h,))
+        items_48h = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM news_items WHERE relevance_score >= 7 AND fetched_date > ?", (cutoff_48h,))
+        high_rel = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM news_items WHERE triggered_risk_id IS NOT NULL", ())
+        risks_updated = cursor.fetchone()[0]
+
+        cursor.execute("SELECT MAX(fetched_date) FROM news_items", ())
+        last_refresh = cursor.fetchone()[0] or "Never"
+
+        return {
+            "last_refresh": last_refresh,
+            "items_last_48h": items_48h,
+            "high_relevance": high_rel,
+            "risks_updated": risks_updated
+        }
+    except:
+        return {"last_refresh": "Never", "items_last_48h": 0,
+                "high_relevance": 0, "risks_updated": 0}

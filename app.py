@@ -1,5 +1,9 @@
+import json
 import os
 import sqlite3
+import threading
+import time
+from datetime import datetime
 
 from flask import Flask, jsonify, render_template, request
 
@@ -8,7 +12,9 @@ from database import init_db
 from agents.risk_register_agent import risk_register_bp
 from agents.ingestion_agent      import ingestion_bp
 from agents.ingestion_agent      import process_document_pipeline as process_document
-from agents.news_agent           import news_bp
+from agents.news_agent           import (news_bp, fetch_news, analyze_relevance,
+                                         map_to_risks, generate_risk_bulletin,
+                                         get_refresh_status)
 from agents.arc_pack_agent       import arc_pack_bp
 from agents.coordination_agent   import coordination_bp
 
@@ -57,6 +63,94 @@ def create_app() -> Flask:
 
 
 app = create_app()
+
+
+_news_cache = {"items": [], "bulletin": {}, "mapping": {}, "last_run": None}
+
+
+def run_news_pipeline():
+    """Full news pipeline — fetch, score, map, bulletin."""
+    print(">> News pipeline starting...")
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        raw     = fetch_news()
+        scored  = analyze_relevance(raw)
+        mapping = map_to_risks([i for i in scored if i.get('relevance_score', 0) >= 7], conn)
+        bulletin = generate_risk_bulletin(scored)
+
+        # Save to DB
+        cursor = conn.cursor()
+        for item in scored:
+            cursor.execute("""
+                INSERT OR IGNORE INTO news_items
+                (headline, source, url, published_date, fetched_date,
+                 relevance_score, mapped_risk_categories, ai_analysis)
+                VALUES (?,?,?,?,datetime('now'),?,?,?)
+            """, (
+                item.get('headline', ''),
+                item.get('source', ''),
+                item.get('url', ''),
+                item.get('published_date', ''),
+                item.get('relevance_score', 0),
+                json.dumps(item.get('risk_categories', [])),
+                item.get('one_line_insight', '')
+            ))
+        conn.commit()
+
+        _news_cache["items"]    = scored
+        _news_cache["bulletin"] = bulletin
+        _news_cache["mapping"]  = mapping
+        _news_cache["last_run"] = datetime.now().isoformat()
+        print(f">> News pipeline done: {len(scored)} scored items")
+
+    except Exception as e:
+        print(f">> News pipeline error: {e}")
+    finally:
+        conn.close()
+
+
+@app.route('/api/news/fetch', methods=['GET'])
+def news_fetch():
+    thread = threading.Thread(target=run_news_pipeline)
+    thread.daemon = True
+    thread.start()
+    thread.join(timeout=60)  # Wait max 60s
+    return jsonify({
+        "items":    _news_cache.get("items", []),
+        "bulletin": _news_cache.get("bulletin", {}),
+        "mapping":  _news_cache.get("mapping", {}),
+        "last_run": _news_cache.get("last_run")
+    })
+
+
+@app.route('/api/news/latest', methods=['GET'])
+def news_latest():
+    if not _news_cache["items"]:
+        run_news_pipeline()
+    return jsonify({
+        "items":    _news_cache.get("items", []),
+        "bulletin": _news_cache.get("bulletin", {}),
+        "mapping":  _news_cache.get("mapping", {})
+    })
+
+
+@app.route('/api/news/bulletin', methods=['GET'])
+def news_bulletin():
+    return jsonify(_news_cache.get("bulletin", {}))
+
+
+@app.route('/api/news/refresh-status', methods=['GET'])
+def news_refresh_status():
+    conn = sqlite3.connect(DB_PATH)
+    status = get_refresh_status(conn)
+    conn.close()
+    status["last_run"] = _news_cache.get("last_run", "Never")
+    return jsonify(status)
+
+
+@app.route('/news')
+def news_page():
+    return render_template('news_monitor.html')
 
 
 @app.route('/api/ingest/upload', methods=['POST'])
