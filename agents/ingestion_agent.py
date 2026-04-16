@@ -543,3 +543,69 @@ def process_document_pipeline(filepath, db_connection):
         "reconciliation": reconciliation,
         "page_count": extracted["page_count"]
     }
+
+
+def seed_sample_documents(uploads_folder):
+    """Create sample files for demo if uploads folder is empty."""
+    import os
+    os.makedirs(uploads_folder, exist_ok=True)
+
+    if os.listdir(uploads_folder):
+        return  # Already has files, skip seeding
+
+    # Sample 1: Old risk register
+    risk_register_text = """DCT EVENTS DEPARTMENT — RISK REGISTER 2024
+
+Risk ID | Category | Risk Title | Description | Likelihood | Impact | Mitigation | Owner
+R-001 | Safety | Crowd Crush at Entry Gates | Large crowds during peak entry times may cause dangerous crushing at narrow entry gates | 4 | 5 | Install crowd barriers, deploy additional stewards, stagger entry times | Head of Security
+R-002 | Operational | Contractor Non-Delivery | Key AV contractor may fail to deliver equipment on time due to supply chain issues | 3 | 4 | Dual supplier agreement, 48hr equipment check protocol | Events Manager
+R-003 | Reputational | Social Media Incident | Negative social media coverage during event due to poor guest experience | 3 | 3 | Media monitoring team, rapid response protocol, VIP experience manager | Communications Lead
+R-004 | Financial | Ticket Revenue Shortfall | Lower than projected ticket sales due to competing events in same weekend | 3 | 4 | Early bird pricing, corporate package sales, marketing campaign | Finance Manager
+R-005 | Compliance | Permit Delays | Municipality permits not issued in time causing event postponement | 2 | 5 | Apply 90 days in advance, dedicated liaison officer with Abu Dhabi Municipality | Legal & Compliance
+R-006 | Safety | Medical Emergency Capacity | On-site medical team insufficient for attendance of 20,000+ | 3 | 5 | SEHA partnership, 2 ambulances on standby, trained first aiders per 500 guests | Health & Safety
+R-007 | Operational | Weather Disruption | Outdoor event vulnerable to sandstorm or unexpected rainfall | 4 | 3 | Weather monitoring 72hr in advance, shelter contingency plan, postponement protocol | Operations Director
+R-008 | Strategic | Headline Act Cancellation | Lead performer cancels within 48hrs of event | 2 | 5 | Contractual penalty clauses, backup performer on standby, refund policy ready | CEO Office
+R-009 | Operational | Parking & Transport Failure | Insufficient parking and shuttle services causing guest dissatisfaction | 4 | 3 | Pre-book parking, 3 shuttle routes, ADDC coordination | Logistics Manager
+R-010 | Reputational | VIP Protocol Breach | Mishandling of VIP or government guest causing diplomatic sensitivity | 2 | 5 | Dedicated VIP team, protocol officer, pre-event briefing for all senior staff | Protocol Officer
+"""
+
+    # Sample 2: Lessons learned
+    lessons_text = """LESSONS LEARNED REPORT
+Event: Abu Dhabi Summer Entertainment Programme 2024
+Prepared by: Events Risk Team | Date: September 2024
+
+LESSON 1 — CROWD MANAGEMENT
+Event: Opening Night Concert, Yas Island Amphitheatre, July 2024
+What Happened: Entry gates opened 30 minutes late due to IT ticketing system failure.
+Approximately 3,000 guests queued in 42°C heat. Two guests required medical attention for heat exhaustion.
+Root Cause: Ticketing vendor performed a software update 2 hours before gates opened without notifying DCT.
+Corrective Action: Ticketing system locked from changes 72 hours before any event. Manual backup ticketing deployed.
+Preventive Action: All vendor system change freezes to be written into contracts. Test run mandatory 24hrs before event.
+
+LESSON 2 — CONTRACTOR MANAGEMENT
+Event: Cultural Festival, Manarat Al Saadiyat, August 2024
+What Happened: Stage construction contractor mobilised 6 hours late. Event opening delayed by 2 hours.
+Live broadcast window missed. Estimated reputational and contractual cost: AED 450,000.
+Root Cause: Contractor had conflicting commitment at another venue. DCT had no exclusivity clause.
+Corrective Action: Issued formal notice to contractor. Penalty clause invoked.
+Preventive Action: All key contractors to have exclusivity clauses for event day +2 days prior.
+Backup contractor list maintained for all critical services.
+
+LESSON 3 — WEATHER CONTINGENCY
+Event: Outdoor Film Screening, Corniche, February 2024
+What Happened: Unexpected wind advisory (35 knots) issued 4 hours before event.
+No pre-agreed decision framework existed. Team spent 2 hours debating cancellation.
+Event proceeded, screen partially damaged, guest experience poor.
+Root Cause: No pre-defined weather decision matrix. Escalation path unclear.
+Corrective Action: Event cancelled early and guests notified. Partial refund issued.
+Preventive Action: Weather decision matrix created — wind >25 knots = postpone outdoor screening.
+Decision authority assigned to Operations Director. NCMS monitoring mandatory for all outdoor events.
+"""
+
+    with open(os.path.join(uploads_folder, 'sample_risk_register_2024.txt'), 'w') as f:
+        f.write(risk_register_text)
+
+    with open(os.path.join(uploads_folder, 'sample_lessons_learned_2024.txt'), 'w') as f:
+        f.write(lessons_text)
+
+    print(">> Sample documents seeded to uploads/")

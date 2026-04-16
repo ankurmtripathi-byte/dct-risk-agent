@@ -20,6 +20,9 @@ def create_app() -> Flask:
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     init_db()
 
+    from agents.ingestion_agent import seed_sample_documents
+    seed_sample_documents(UPLOAD_FOLDER)
+
     app.register_blueprint(risk_register_bp)
     app.register_blueprint(ingestion_bp)
     app.register_blueprint(news_bp)
