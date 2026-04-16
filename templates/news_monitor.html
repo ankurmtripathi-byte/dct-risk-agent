@@ -1,171 +1,142 @@
 {% extends "base.html" %}
-{% block title %}News Intelligence · DCT Risk Intelligence{% endblock %}
-{% block page_title %}News Intelligence{% endblock %}
-{% block page_sub %}Real-time news monitoring mapped to DCT risk categories{% endblock %}
+{% block title %}News Risk Intelligence · DCT Risk Intelligence{% endblock %}
+{% block page_title %}News Risk Intelligence{% endblock %}
+{% block page_sub %}Last 48 hours &mdash; Abu Dhabi &amp; UAE{% endblock %}
 
 {% block top_actions %}
-  <button class="btn-outline" onclick="fetchCurated()">&#11088; Today's Curated Stories</button>
-  <button class="btn-primary" onclick="fetchNews()">&#128240; Fetch Latest News</button>
+  <span class="muted small" style="align-self:center">
+    Last refreshed: <span id="lastRefreshed">—</span>
+  </span>
+  <button class="btn-primary" onclick="refreshNews()">&#8635; Refresh</button>
 {% endblock %}
 
 {% block content %}
-<div class="card" id="fetchCard" style="display:none">
-  <div class="card-body">
-    <div class="spinner-row"><div class="spinner"></div><span id="fetchMsg">Fetching news…</span></div>
+
+<!-- Demo banner (hidden until demo data detected) -->
+<div class="demo-banner" id="demoBanner" style="display:none">
+  <span>&#9888;</span>
+  <span>Demo mode — showing synthetic news data. Add a <strong>NEWSAPI_KEY</strong> environment variable to enable live news.</span>
+</div>
+
+<!-- KPI row -->
+<div class="kpi-row">
+  <div class="kpi-card">
+    <div class="kpi-label">Articles Analysed</div>
+    <div class="kpi-value" id="kpiTotal">—</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">High Relevance</div>
+    <div class="kpi-value alert" id="kpiHighRel">—</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Risks Updated</div>
+    <div class="kpi-value" id="kpiRisksUpdated">—</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">New Risks Triggered</div>
+    <div class="kpi-value" id="kpiNewRisks">—</div>
   </div>
 </div>
 
-<div class="filter-bar card">
-  <div class="filter-group" style="flex:1">
-    <label>Custom Query</label>
-    <input type="text" id="newsQuery" placeholder="Leave blank for default DCT query" style="width:100%">
-  </div>
-  <div class="filter-group">
-    <label>Results</label>
-    <select id="newsPageSize">
-      <option value="10">10</option>
-      <option value="20" selected>20</option>
-      <option value="50">50</option>
-    </select>
-  </div>
-  <div class="filter-group">
-    <label>Min Relevance</label>
-    <select id="newsMinScore">
-      <option value="0">Show all</option>
-      <option value="5">≥ 5</option>
-      <option value="7">≥ 7</option>
-    </select>
-  </div>
-  <div class="filter-group">
-    <label>&nbsp;</label>
-    <button class="btn-ghost" onclick="loadNews()">&#8635; Refresh</button>
-  </div>
+<!-- Filter bar -->
+<div class="filter-bar">
+  <span class="muted small" style="margin-right:4px">Filter:</span>
+  <button class="filter-btn active" id="filter-all"        onclick="setFilter('all',this)">All</button>
+  <button class="filter-btn"        id="filter-immediate"  onclick="setFilter('immediate',this)">&#128308; Immediate</button>
+  <button class="filter-btn"        id="filter-elevated"   onclick="setFilter('elevated',this)">&#128993; Elevated</button>
+  <button class="filter-btn"        id="filter-monitor"    onclick="setFilter('monitor',this)">&#128994; Monitor</button>
+  <button class="filter-btn"        id="filter-high"       onclick="setFilter('high',this)">&#11088; High Relevance (&ge;7)</button>
 </div>
 
-<div id="newsGrid" class="news-grid mt16">
-  <p class="empty-msg">Loading news items…</p>
+<!-- Two-column layout -->
+<div class="news-layout">
+
+  <!-- Left: news feed -->
+  <div>
+    <div id="newsFeed">
+      <p class="muted" style="padding:20px 0;text-align:center">
+        Click <strong>Refresh</strong> to load the latest news.
+      </p>
+    </div>
+  </div>
+
+  <!-- Right: bulletin panel -->
+  <div>
+    <div id="bulletinPanel">
+      <div class="bulletin-card">
+        <h3>&#128240; Intelligence Bulletin</h3>
+        <p class="muted small" style="text-align:center;padding:16px 0">
+          Bulletin will appear after first refresh.
+        </p>
+      </div>
+    </div>
+  </div>
+
 </div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
-let newsItems = [];
+let _allItems   = [];
+let _activeFilter = 'all';
 
-async function loadNews() {
-  const minScore = parseInt(document.getElementById('newsMinScore').value)||0;
-  try {
-    newsItems = await fetch('/api/news').then(r=>r.json());
-    const filtered = newsItems.filter(n => (n.relevance_score||0) >= minScore);
-    renderNews(filtered);
-  } catch(e) {
-    document.getElementById('newsGrid').innerHTML = `<p class="empty-msg error">${esc(e.message)}</p>`;
-  }
+function setFilter(name, btn) {
+  _activeFilter = name;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilter();
 }
 
-function renderNews(items) {
-  const grid = document.getElementById('newsGrid');
-  if (!items.length) {
-    grid.innerHTML = '<p class="empty-msg">No news items. Click "Fetch Latest News" to begin.</p>';
-    return;
-  }
-  grid.innerHTML = items.map(n => {
-    const score = n.relevance_score || 0;
-    const scoreClass = score >= 7 ? 'high' : score >= 5 ? 'medium' : 'low';
-    const cats = (n.mapped_risk_categories||[]).join(', ') || '—';
-    const dateStr = n.published_date ? new Date(n.published_date).toLocaleDateString('en-GB') : '—';
-    const analysed = n.ai_analysis ? '' : ' unanalysed';
-    return `<div class="news-card${analysed}">
-      <div class="news-card-head">
-        <span class="news-score ${scoreClass}" title="Relevance score">${score || '?'}</span>
-        <div class="news-meta">
-          <span class="news-source">${esc(n.source||'Unknown')}</span>
-          <span class="news-date">${dateStr}</span>
-        </div>
-        ${n.triggered_risk_id ? `<span class="news-linked" title="Risk created">${esc(n.triggered_risk_id)}</span>` : ''}
-      </div>
-      <h4 class="news-headline">${esc(n.headline||'No headline')}</h4>
-      ${n.ai_analysis ? `<p class="news-analysis">${esc(n.ai_analysis)}</p>` : '<p class="news-hint muted">Not yet analysed by AI</p>'}
-      ${cats !== '—' ? `<div class="news-cats">${(n.mapped_risk_categories||[]).map(c=>`<span class="cat-chip sm">${esc(c)}</span>`).join('')}</div>` : ''}
-      <div class="news-actions">
-        ${!n.ai_analysis ? `<button class="btn-sm btn-primary" onclick="analyseItem(${n.id})">&#129302; Analyse</button>` : ''}
-        ${!n.triggered_risk_id ? `<button class="btn-sm btn-outline" onclick="createRisk(${n.id})">&#43; Create Risk</button>` : ''}
-        ${n.url ? `<a href="${esc(n.url)}" target="_blank" rel="noopener" class="btn-sm btn-ghost">&#127760; Read</a>` : ''}
-        <button class="btn-sm btn-ghost danger" onclick="deleteItem(${n.id})">&#10006;</button>
-      </div>
-    </div>`;
-  }).join('');
+function applyFilter() {
+  // Placeholder — news feed rendering added in Part B
+  console.log('Filter set to:', _activeFilter);
 }
 
-async function fetchCurated() {
-  document.getElementById('fetchMsg').textContent = 'Fetching today\'s curated stories…';
-  document.getElementById('fetchCard').style.display = 'block';
+async function refreshNews() {
+  document.getElementById('lastRefreshed').textContent = 'Loading…';
   try {
-    const resp = await fetch('/api/news/curated', {method: 'POST'});
+    const resp = await fetch('/api/news/fetch');
     const data = await resp.json();
-    if (data.error) throw new Error(data.error);
-    showToast(`Curated: ${data.fetched} stories, ${data.new} new`, 'success');
-    loadNews();
+
+    const items = data.items || [];
+    _allItems = items;
+
+    // KPI totals
+    const highRel     = items.filter(i => (i.relevance_score || 0) >= 7).length;
+    const newTriggered = (data.mapping || {}).new_triggered?.length || 0;
+    const risksUpdated = (data.mapping || {}).amplified?.length    || 0;
+
+    document.getElementById('kpiTotal').textContent        = items.length;
+    document.getElementById('kpiHighRel').textContent      = highRel;
+    document.getElementById('kpiRisksUpdated').textContent = risksUpdated;
+    document.getElementById('kpiNewRisks').textContent     = newTriggered;
+    document.getElementById('lastRefreshed').textContent   =
+      data.last_run ? new Date(data.last_run).toLocaleTimeString('en-GB') : 'just now';
+
+    // Demo banner
+    const isDemo = items.some(i => i.demo === true);
+    document.getElementById('demoBanner').style.display = isDemo ? 'flex' : 'none';
+
   } catch(e) {
-    showToast(e.message, 'error');
-  } finally {
-    document.getElementById('fetchCard').style.display = 'none';
+    document.getElementById('lastRefreshed').textContent = 'Error';
+    if (typeof showToast !== 'undefined') showToast(e.message, 'error');
   }
 }
 
-async function fetchNews() {
-  const query    = document.getElementById('newsQuery').value.trim();
-  const pageSize = document.getElementById('newsPageSize').value;
-  document.getElementById('fetchMsg').textContent = 'Fetching news from NewsAPI…';
-  document.getElementById('fetchCard').style.display = 'block';
+// Load refresh status on page load (no full pipeline call)
+(async function loadStatus() {
   try {
-    const body = {page_size: parseInt(pageSize)};
-    if (query) body.query = query;
-    const resp = await fetch('/api/news/fetch', {
-      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
-    });
-    const data = await resp.json();
-    if (data.error) throw new Error(data.error);
-    showToast(`Fetched ${data.fetched} articles, ${data.new} new`, 'success');
-    loadNews();
-  } catch(e) {
-    showToast(e.message, 'error');
-  } finally {
-    document.getElementById('fetchCard').style.display = 'none';
-  }
-}
-
-async function analyseItem(id) {
-  showToast('Analysing with Claude…', 'info');
-  try {
-    const resp = await fetch(`/api/news/${id}/analyse`, {method:'POST'});
-    const data = await resp.json();
-    if (data.error) throw new Error(data.error);
-    showToast(`Relevance: ${data.relevance_score}/10`, 'success');
-    loadNews();
-  } catch(e) {
-    showToast(e.message, 'error');
-  }
-}
-
-async function createRisk(id) {
-  try {
-    const resp = await fetch(`/api/news/${id}/create-risk`, {method:'POST'});
-    const data = await resp.json();
-    if (data.error) throw new Error(data.error);
-    showToast(`Risk created: ${data.risk_id}`, 'success');
-    loadNews();
-  } catch(e) {
-    showToast(e.message, 'error');
-  }
-}
-
-async function deleteItem(id) {
-  if (!confirm('Delete this news item?')) return;
-  await fetch(`/api/news/${id}`, {method:'DELETE'});
-  showToast('Deleted', 'success');
-  loadNews();
-}
-
-loadNews();
+    const s = await fetch('/api/news/refresh-status').then(r => r.json());
+    document.getElementById('kpiTotal').textContent        = s.items_last_48h  || 0;
+    document.getElementById('kpiHighRel').textContent      = s.high_relevance  || 0;
+    document.getElementById('kpiRisksUpdated').textContent = s.risks_updated   || 0;
+    document.getElementById('kpiNewRisks').textContent     = '—';
+    document.getElementById('lastRefreshed').textContent   =
+      (s.last_refresh && s.last_refresh !== 'Never')
+        ? new Date(s.last_refresh).toLocaleTimeString('en-GB')
+        : 'Never';
+  } catch(e) { /* silent */ }
+})();
 </script>
 {% endblock %}
