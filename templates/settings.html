@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}Settings · DCT Risk Intelligence{% endblock %}
+{% block page_title %}Platform Settings{% endblock %}
+{% block page_sub %}API keys, organisation defaults and platform configuration{% endblock %}
+
+{% block content %}
+<div style="max-width:680px">
+
+  <!-- API Keys -->
+  <div class="card">
+    <div class="card-head"><span class="card-title">&#128273; API Keys</span></div>
+    <div class="card-body">
+
+      <div class="form-group">
+        <label>Anthropic API Key</label>
+        <div style="display:flex;gap:8px">
+          <input type="password" id="anthropicKey" placeholder="sk-ant-api03-…" style="flex:1">
+          <button class="btn-ghost btn-sm" onclick="toggleVisibility('anthropicKey')">&#128065;</button>
+        </div>
+        <span class="muted small" id="anthropicHint"></span>
+      </div>
+
+      <div class="form-group" style="margin-top:16px">
+        <label>NewsAPI Key <span class="muted small">(optional — enables live news)</span></label>
+        <div style="display:flex;gap:8px">
+          <input type="password" id="newsapiKey" placeholder="Enter NewsAPI key…" style="flex:1">
+          <button class="btn-ghost btn-sm" onclick="toggleVisibility('newsapiKey')">&#128065;</button>
+        </div>
+        <span class="muted small" id="newsapiHint"></span>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center" id="apiStatus"></div>
+    </div>
+  </div>
+
+  <!-- Organisation Defaults -->
+  <div class="card mt16">
+    <div class="card-head"><span class="card-title">&#127963; Organisation Defaults</span></div>
+    <div class="card-body">
+
+      <div class="form-group">
+        <label>Organisation Name</label>
+        <input type="text" id="orgName" placeholder="Department of Culture and Tourism">
+      </div>
+
+      <div class="form-group" style="margin-top:12px">
+        <label>Default Committee Name</label>
+        <input type="text" id="committeeName" placeholder="Audit &amp; Risk Committee">
+      </div>
+
+      <div class="form-group" style="margin-top:12px">
+        <label>Default Risk Owner</label>
+        <input type="text" id="defaultOwner" placeholder="Risk Management Office">
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Save button -->
+  <div style="display:flex;gap:12px;margin-top:16px;align-items:center">
+    <button class="btn-primary" onclick="saveSettings()" id="saveBtn">&#10003; Save Settings</button>
+    <span class="muted small" id="saveStatus"></span>
+  </div>
+
+  <!-- Platform Info -->
+  <div class="card mt16">
+    <div class="card-head"><span class="card-title">&#8505; Platform Information</span></div>
+    <div class="card-body">
+      <table class="data-table" style="width:auto">
+        <tbody>
+          <tr><td class="muted" style="width:180px">Version</td><td>V1.0</td></tr>
+          <tr><td class="muted">Model (Analysis)</td><td>Claude Opus 4</td></tr>
+          <tr><td class="muted">Model (Fast)</td><td>Claude Haiku 4.5</td></tr>
+          <tr><td class="muted">Risk Framework</td><td>ISO 31000:2018</td></tr>
+          <tr><td class="muted">Database</td><td>SQLite (local)</td></tr>
+          <tr><td class="muted">API Health</td>
+            <td><span id="healthStatus">Checking…</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadSettings() {
+  try {
+    const s = await fetch('/api/settings').then(r => r.json());
+
+    if (s.anthropic_key_hint) {
+      document.getElementById('anthropicHint').textContent = `Current: ${s.anthropic_key_hint}`;
+    }
+    if (s.newsapi_key_hint) {
+      document.getElementById('newsapiHint').textContent = `Current: ${s.newsapi_key_hint}`;
+    }
+
+    document.getElementById('orgName').value       = s.org_name       || '';
+    document.getElementById('committeeName').value = s.committee_name || '';
+    document.getElementById('defaultOwner').value  = s.default_owner  || '';
+
+    // API status pills
+    const statusEl = document.getElementById('apiStatus');
+    statusEl.innerHTML =
+      `<span class="score-bubble ${s.anthropic_key_set?'low':'high'}" style="font-size:11px;padding:3px 10px">
+         ${s.anthropic_key_set ? '&#10003; Anthropic API' : '&#9888; Anthropic API missing'}
+       </span>
+       <span class="score-bubble ${s.newsapi_key_set?'low':'medium'}" style="font-size:11px;padding:3px 10px">
+         ${s.newsapi_key_set ? '&#10003; NewsAPI' : '&#9888; NewsAPI not set (demo mode)'}
+       </span>`;
+  } catch(e) {
+    console.error('loadSettings:', e);
+  }
+}
+
+async function checkHealth() {
+  try {
+    const h = await fetch('/health').then(r => r.json());
+    const el = document.getElementById('healthStatus');
+    el.innerHTML = h.api_key_set
+      ? `<span style="color:var(--green)">&#10003; Connected</span>`
+      : `<span style="color:var(--red)">&#9888; API key missing</span>`;
+  } catch(e) {
+    document.getElementById('healthStatus').textContent = 'Unreachable';
+  }
+}
+
+async function saveSettings() {
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  const body = {
+    anthropic_key:  document.getElementById('anthropicKey').value.trim(),
+    newsapi_key:    document.getElementById('newsapiKey').value.trim(),
+    org_name:       document.getElementById('orgName').value.trim(),
+    committee_name: document.getElementById('committeeName').value.trim(),
+    default_owner:  document.getElementById('defaultOwner').value.trim(),
+  };
+
+  try {
+    const resp = await fetch('/api/settings', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify(body),
+    });
+    const d = await resp.json();
+    if (d.saved) {
+      showToast('Settings saved — restart app to apply key changes', 'success', 6000);
+      document.getElementById('saveStatus').textContent = 'Saved ✓';
+      setTimeout(() => document.getElementById('saveStatus').textContent = '', 4000);
+      // Clear password fields
+      document.getElementById('anthropicKey').value = '';
+      document.getElementById('newsapiKey').value   = '';
+      loadSettings();
+    }
+  } catch(e) {
+    showToast('Save failed: ' + e.message, 'error');
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = '✓ Save Settings';
+  }
+}
+
+function toggleVisibility(id) {
+  const el = document.getElementById(id);
+  el.type = el.type === 'password' ? 'text' : 'password';
+}
+
+loadSettings();
+checkHealth();
+</script>
+{% endblock %}

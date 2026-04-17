@@ -1,172 +1,428 @@
 {% extends "base.html" %}
 {% block title %}Dashboard · DCT Risk Intelligence{% endblock %}
 {% block page_title %}Risk Intelligence Dashboard{% endblock %}
-{% block page_sub %}Enterprise-wide risk posture overview · Department of Culture &amp; Tourism{% endblock %}
+{% block page_sub %}Enterprise-wide risk posture · Department of Culture &amp; Tourism{% endblock %}
 
 {% block top_actions %}
-  <button class="btn-primary" onclick="location.href='/risk-register'">&#43; New Risk</button>
+  <button class="btn-primary" onclick="location.href='/risk-register'">&#43; New Risk Register</button>
 {% endblock %}
 
 {% block content %}
-<!-- Stats Row -->
-<div class="stats-row" id="statsRow">
-  <div class="stat-card"><div class="stat-ico total">&#9632;</div><div class="stat-body"><div class="stat-n" id="sTotal">—</div><div class="stat-l">Total Risks</div></div></div>
-  <div class="stat-card"><div class="stat-ico high">&#9650;</div><div class="stat-body"><div class="stat-n high" id="sHigh">—</div><div class="stat-l">High Risk</div></div></div>
-  <div class="stat-card"><div class="stat-ico medium">&#9632;</div><div class="stat-body"><div class="stat-n medium" id="sMedium">—</div><div class="stat-l">Medium Risk</div></div></div>
-  <div class="stat-card"><div class="stat-ico low">&#9660;</div><div class="stat-body"><div class="stat-n low" id="sLow">—</div><div class="stat-l">Low Risk</div></div></div>
+
+<!-- ── Row 1: 5 KPI Cards ────────────────────────────────────────────────── -->
+<div class="kpi5-row" id="kpiRow">
+  <div class="kpi5-card">
+    <div class="kpi5-label">Total Active Risks</div>
+    <div class="kpi5-value" id="kTotal">—</div>
+    <div class="kpi5-sub" id="kTotalSub"></div>
+  </div>
+  <div class="kpi5-card alert-card" id="kHighCard">
+    <div class="kpi5-label">High / Critical (&ge;15)</div>
+    <div class="kpi5-value" id="kHighCrit">—</div>
+    <div class="kpi5-sub" id="kHighSub"></div>
+  </div>
+  <div class="kpi5-card">
+    <div class="kpi5-label">Documents Ingested</div>
+    <div class="kpi5-value" id="kDocs">—</div>
+    <div class="kpi5-sub">total processed</div>
+  </div>
+  <div class="kpi5-card">
+    <div class="kpi5-label">News Items (7 days)</div>
+    <div class="kpi5-value" id="kNews">—</div>
+    <div class="kpi5-sub">analysed &amp; scored</div>
+  </div>
+  <div class="kpi5-card">
+    <div class="kpi5-label">ARC Packs Generated</div>
+    <div class="kpi5-value" id="kArc">—</div>
+    <div class="kpi5-sub">total packs</div>
+  </div>
 </div>
 
-<div class="dash-grid">
-  <!-- Level Breakdown -->
+<!-- ── Row 2: Three-panel layout ────────────────────────────────────────── -->
+<div class="dash3col mt16">
+
+  <!-- Left 35%: Risk by Level -->
   <div class="card">
     <div class="card-head">
       <span class="card-title">&#127961; Risk by Level</span>
+      <span class="muted small" id="levelTotal"></span>
     </div>
-    <div class="card-body" id="levelBreakdown">
+    <div class="card-body" id="levelPanel">
       <p class="empty-msg">Loading…</p>
     </div>
   </div>
 
-  <!-- Status Breakdown -->
+  <!-- Center 40%: 5×5 Risk Heatmap -->
   <div class="card">
     <div class="card-head">
-      <span class="card-title">&#9654; Risk by Status</span>
+      <span class="card-title">&#128293; Risk Heatmap</span>
+      <span class="muted small">Impact &rarr; / Likelihood &uarr;</span>
     </div>
-    <div class="card-body" id="statusBreakdown">
-      <p class="empty-msg">Loading…</p>
-    </div>
-  </div>
-
-  <!-- Top High Risks -->
-  <div class="card span-2">
-    <div class="card-head">
-      <span class="card-title">&#9888; Top Risks Requiring Attention</span>
-      <a href="/risk-register" class="card-link">View all &rarr;</a>
-    </div>
-    <div class="card-body p0">
-      <table class="data-table" id="topRisksTable">
-        <thead>
-          <tr><th>Risk ID</th><th>Title</th><th>Level</th><th>Category</th><th>Score</th><th>Status</th><th>Owner</th></tr>
-        </thead>
-        <tbody id="topRisksTbody"><tr><td colspan="7" class="empty-msg">Loading…</td></tr></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- Quick Actions -->
-  <div class="card">
-    <div class="card-head"><span class="card-title">&#9889; Quick Actions</span></div>
     <div class="card-body">
-      <div class="quick-actions">
-        <a href="/risk-register" class="qa-btn">
-          <span class="qa-ico">&#128737;</span>
-          <span>Generate Risk Register</span>
-        </a>
-        <a href="/ingestion" class="qa-btn">
-          <span class="qa-ico">&#128196;</span>
-          <span>Upload Document</span>
-        </a>
-        <a href="/news-monitor" class="qa-btn">
-          <span class="qa-ico">&#128240;</span>
-          <span>Check News Alerts</span>
-        </a>
-        <a href="/arc-pack" class="qa-btn">
-          <span class="qa-ico">&#128203;</span>
-          <span>Generate ARC Pack</span>
-        </a>
+      <div class="heatmap-wrap">
+        <div class="heatmap-grid" id="heatmapGrid">
+          <!-- filled by JS -->
+        </div>
+        <div class="heatmap-x-label">Impact (1 &rarr; 5)</div>
+      </div>
+      <!-- Click-to-list popover -->
+      <div id="heatmapPopover" class="heatmap-popover" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <strong id="heatmapPopTitle"></strong>
+          <button class="btn-icon" onclick="document.getElementById('heatmapPopover').style.display='none'">&#10005;</button>
+        </div>
+        <div id="heatmapPopList"></div>
       </div>
     </div>
   </div>
 
-  <!-- Recent Activity -->
+  <!-- Right 25%: Activity Feed -->
   <div class="card">
-    <div class="card-head"><span class="card-title">&#128337; Recent Risks</span></div>
+    <div class="card-head">
+      <span class="card-title">&#128337; Recent Activity</span>
+      <button class="btn-ghost btn-sm" onclick="loadDashboard()">&#8635;</button>
+    </div>
     <div class="card-body p0">
-      <ul class="activity-feed" id="activityFeed">
+      <ul class="activity-feed" id="actFeed">
         <li class="empty-msg">Loading…</li>
       </ul>
     </div>
   </div>
+
 </div>
+
+<!-- ── Row 3: Intelligence Alerts ────────────────────────────────────────── -->
+<div class="card mt16" id="alertsCard">
+  <div class="card-head">
+    <span class="card-title">&#9888; Intelligence Alerts</span>
+    <span class="muted small" id="alertCount"></span>
+  </div>
+  <div id="alertsBody" class="card-body">
+    <p class="empty-msg">Loading…</p>
+  </div>
+</div>
+
+<!-- ── Row 4: Quick Actions ──────────────────────────────────────────────── -->
+<div class="qa6-grid mt16">
+  <a href="/risk-register" class="qa6-btn">
+    <div class="qa6-ico">&#128737;</div>
+    <div class="qa6-label">New Event Risk Register</div>
+    <div class="qa6-sub">AI-generated 15-risk assessment</div>
+  </a>
+  <a href="/ingestion" class="qa6-btn">
+    <div class="qa6-ico">&#128196;</div>
+    <div class="qa6-label">Upload Documents</div>
+    <div class="qa6-sub">Ingest &amp; extract risks from files</div>
+  </a>
+  <a href="/news" class="qa6-btn">
+    <div class="qa6-ico">&#128240;</div>
+    <div class="qa6-label">Check News</div>
+    <div class="qa6-sub">Fetch &amp; score latest news</div>
+  </a>
+  <a href="/arc-pack" class="qa6-btn">
+    <div class="qa6-ico">&#128203;</div>
+    <div class="qa6-label">Generate ARC Pack</div>
+    <div class="qa6-sub">Committee-ready risk report</div>
+  </a>
+  <a href="/risk-register?action=manual" class="qa6-btn">
+    <div class="qa6-ico">&#43;&#9632;</div>
+    <div class="qa6-label">Add Manual Risk</div>
+    <div class="qa6-sub">Manually enter a new risk</div>
+  </a>
+  <a href="/coordination" class="qa6-btn">
+    <div class="qa6-ico">&#9969;</div>
+    <div class="qa6-label">Agency Matrix</div>
+    <div class="qa6-sub">View cross-agency coordination</div>
+  </a>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
+/* ── heatmap state ─────────────────────────────────────────────────────────── */
+let _heatmapData = {};
+
+function timeAgo(dateStr) {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1)  return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs  < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function sourceLabel(src) {
+  const map = {
+    'AI Generation': 'AI generation',
+    'Ingested':      'document ingestion',
+    'News-Triggered':'news trigger',
+    'Cascaded':      'cascade',
+    'Demo':          'demo seed',
+    'Manual':        'manual entry',
+  };
+  return map[src] || src || 'unknown';
+}
+
+/* ── main load ─────────────────────────────────────────────────────────────── */
 async function loadDashboard() {
   try {
-    const r = await fetch('/api/risks/stats');
-    const d = await r.json();
+    const d = await fetch('/api/dashboard/stats').then(r => r.json());
 
-    document.getElementById('sTotal').textContent  = d.total;
-    document.getElementById('sHigh').textContent   = d.high;
-    document.getElementById('sMedium').textContent = d.medium;
-    document.getElementById('sLow').textContent    = d.low;
+    /* KPI row */
+    document.getElementById('kTotal').textContent    = d.total_active ?? '—';
+    document.getElementById('kDocs').textContent     = d.docs_ingested ?? '—';
+    document.getElementById('kNews').textContent     = d.news_7d       ?? '—';
+    document.getElementById('kArc').textContent      = d.arc_packs     ?? '—';
 
-    // Level breakdown
-    const levelLabels = {enterprise:'Enterprise',affiliate:'Affiliate',department:'Department',event:'Event'};
-    const lb = document.getElementById('levelBreakdown');
-    lb.innerHTML = (d.by_level||[]).map(l =>
-      `<div class="bar-row">
-        <span class="bar-label">${levelLabels[l.level]||l.level}</span>
-        <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100,l.c/(d.total||1)*100)}%"></div></div>
-        <span class="bar-count">${l.c}</span>
-      </div>`
-    ).join('') || '<p class="empty-msg">No data</p>';
+    const hc = d.high_critical ?? 0;
+    document.getElementById('kHighCrit').textContent = hc;
+    document.getElementById('kHighSub').textContent  =
+      `${d.high ?? 0} high · ${d.medium ?? 0} medium · ${d.low ?? 0} low`;
+    document.getElementById('kHighCard').classList.toggle('danger', hc > 5);
 
-    // Status breakdown
-    const statusColors = {Open:'#ef4444',Mitigating:'#f59e0b',Accepted:'#6366f1',Closed:'#22c55e'};
-    const sb = document.getElementById('statusBreakdown');
-    sb.innerHTML = (d.by_status||[]).map(s =>
-      `<div class="bar-row">
-        <span class="bar-label">${s.status}</span>
-        <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100,s.c/(d.total||1)*100)}%;background:${statusColors[s.status]||'#1e6fb5'}"></div></div>
-        <span class="bar-count">${s.c}</span>
-      </div>`
-    ).join('') || '<p class="empty-msg">No data</p>';
+    /* Level breakdown */
+    renderLevelPanel(d.by_level || [], d.total_active || 1);
 
-    // Top risks table
-    const tbody = document.getElementById('topRisksTbody');
-    const allRisks = await fetch('/api/risks').then(r=>r.json());
-    const top = allRisks.filter(r=>r.risk_score>=13).slice(0,8);
-    if (top.length) {
-      tbody.innerHTML = top.map(r => {
-        const lv = scoreLevel(r.risk_score);
-        return `<tr>
-          <td><span class="risk-id-tag">${esc(r.risk_id)}</span></td>
-          <td>${esc(r.title)}</td>
-          <td><span class="level-chip">${r.level||''}</span></td>
-          <td>${esc(r.category)}</td>
-          <td><span class="score-bubble ${lv}">${r.risk_score}</span></td>
-          <td><span class="status-badge ${(r.status||'').toLowerCase().replace(' ','-')}">${esc(r.status)}</span></td>
-          <td class="muted">${esc(r.owner)}</td>
-        </tr>`;
-      }).join('');
-    } else {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty-msg">No high risks · all clear</td></tr>';
-    }
+    /* Heatmap */
+    renderHeatmap(d.heatmap || [], d);
 
-    // Recent activity
-    const feed = document.getElementById('activityFeed');
-    const recent = (d.recent||[]).slice(0,5);
-    if (recent.length) {
-      feed.innerHTML = recent.map(r => {
-        const lv = scoreLevel(r.risk_score);
-        return `<li class="activity-item">
-          <span class="act-dot ${lv}"></span>
-          <div>
-            <div class="act-title">${esc(r.title)}</div>
-            <div class="act-meta">${esc(r.risk_id)} · ${r.entity_name||''} · Score ${r.risk_score}</div>
-          </div>
-        </li>`;
-      }).join('');
-    } else {
-      feed.innerHTML = '<li class="empty-msg">No risks yet — generate your first register</li>';
-    }
+    /* Activity feed */
+    renderFeed(d.recent_risks || []);
+
+    /* Alerts */
+    renderAlerts(d.alerts || []);
 
   } catch(e) {
-    console.error(e);
+    console.error('loadDashboard:', e);
+    document.getElementById('alertsBody').innerHTML =
+      `<div class="alert-item alert-critical">
+        <span>&#9888; Failed to load dashboard: ${esc(e.message)}</span>
+        <button class="btn-ghost btn-sm" onclick="loadDashboard()">&#8635; Retry</button>
+      </div>`;
   }
 }
+
+/* ── level panel (CSS bars + donut-style) ─────────────────────────────────── */
+function renderLevelPanel(byLevel, total) {
+  const labels = {enterprise:'Enterprise',affiliate:'Affiliate',department:'Department',event:'Event'};
+  const colors = {enterprise:'#1e6fb5',affiliate:'#7c3aed',department:'#f59e0b',event:'#ef4444'};
+  const icons  = {enterprise:'&#127963;',affiliate:'&#127965;',department:'&#127970;',event:'&#127895;'};
+
+  // Fill missing levels with 0
+  const allLevels = ['enterprise','affiliate','department','event'];
+  const map = Object.fromEntries(byLevel.map(l => [l.level, l.c]));
+  allLevels.forEach(l => { if (!map[l]) map[l] = 0; });
+
+  document.getElementById('levelTotal').textContent = `${total} open`;
+
+  // CSS donut segments
+  let offset = 0;
+  const segments = allLevels.map(l => {
+    const pct = total > 0 ? (map[l] / total) * 100 : 0;
+    const seg  = { level: l, pct, offset, count: map[l] };
+    offset += pct;
+    return seg;
+  });
+
+  const donutSegments = segments.map(s =>
+    `<circle cx="60" cy="60" r="44"
+      fill="none" stroke="${colors[s.level]}"
+      stroke-width="16"
+      stroke-dasharray="${(s.pct * 2.765).toFixed(2)} ${(276.5).toFixed(2)}"
+      stroke-dashoffset="${(-s.offset * 2.765).toFixed(2)}"
+      transform="rotate(-90 60 60)"
+      style="cursor:pointer"
+      onclick="location.href='/risk-register?level=${s.level}'"
+      title="${labels[s.level]}: ${s.count}">
+      <title>${labels[s.level]}: ${s.count}</title>
+    </circle>`
+  ).join('');
+
+  const legendRows = allLevels.map(l =>
+    `<div class="level-leg-row" onclick="location.href='/risk-register?level=${l}'">
+      <span class="level-dot" style="background:${colors[l]}"></span>
+      <span class="level-leg-label">${icons[l]} ${labels[l]}</span>
+      <div class="bar-track" style="flex:1;margin:0 8px">
+        <div class="bar-fill" style="width:${total>0?(map[l]/total*100).toFixed(1):0}%;background:${colors[l]}"></div>
+      </div>
+      <span class="bar-count">${map[l]}</span>
+    </div>`
+  ).join('');
+
+  document.getElementById('levelPanel').innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;gap:16px">
+      <svg width="120" height="120" viewBox="0 0 120 120">
+        <circle cx="60" cy="60" r="44" fill="none" stroke="var(--border)" stroke-width="16"/>
+        ${donutSegments}
+        <text x="60" y="56" text-anchor="middle" font-size="18" font-weight="700" fill="var(--text)">${total}</text>
+        <text x="60" y="70" text-anchor="middle" font-size="9" fill="var(--muted)">open risks</text>
+      </svg>
+      <div style="width:100%">${legendRows}</div>
+    </div>`;
+}
+
+/* ── 5×5 heatmap ──────────────────────────────────────────────────────────── */
+function renderHeatmap(cells, fullData) {
+  // Build lookup: heatmapData[likelihood][impact] = {count, risks[]}
+  _heatmapData = {};
+  cells.forEach(c => {
+    if (!_heatmapData[c.l]) _heatmapData[c.l] = {};
+    _heatmapData[c.l][c.i] = { count: c.c };
+  });
+
+  const grid = document.getElementById('heatmapGrid');
+  let html = '';
+
+  // Y-axis: likelihood 5 (top) → 1 (bottom)
+  for (let lh = 5; lh >= 1; lh--) {
+    for (let imp = 1; imp <= 5; imp++) {
+      const score = lh * imp;
+      const n     = (_heatmapData[lh] || {})[imp]?.count || 0;
+      const cls   = score >= 20 ? 'hm-critical'
+                  : score >= 15 ? 'hm-high'
+                  : score >= 8  ? 'hm-medium'
+                  : score >= 4  ? 'hm-low'
+                  : 'hm-trivial';
+      html += `<div class="hm-cell ${cls} ${n>0?'has-risks':''}"
+                    onclick="showHeatmapCell(${lh},${imp})"
+                    title="L${lh}×I${imp} = score ${score}">
+                 ${n > 0 ? `<span class="hm-n">${n}</span>` : ''}
+                 <span class="hm-score">${score}</span>
+               </div>`;
+    }
+  }
+
+  // Y-axis labels (likelihood)
+  let yLabels = '';
+  for (let lh = 5; lh >= 1; lh--) {
+    yLabels += `<div class="hm-y-label">${lh}</div>`;
+  }
+
+  grid.innerHTML = `
+    <div class="hm-y-axis">
+      <div class="hm-y-title">Likelihood</div>
+      ${yLabels}
+    </div>
+    <div>
+      <div class="hm-cells">${html}</div>
+      <div class="hm-x-labels">
+        ${[1,2,3,4,5].map(i=>`<div class="hm-x-label">${i}</div>`).join('')}
+      </div>
+    </div>`;
+}
+
+async function showHeatmapCell(lh, imp) {
+  const score = lh * imp;
+  const pop   = document.getElementById('heatmapPopover');
+  const title = document.getElementById('heatmapPopTitle');
+  const list  = document.getElementById('heatmapPopList');
+
+  title.textContent = `Score ${score} — L${lh} × I${imp}`;
+  list.innerHTML    = '<p class="muted small">Loading…</p>';
+  pop.style.display = 'block';
+
+  try {
+    const risks = await fetch('/api/risks').then(r => r.json());
+    const match = risks.filter(r => r.likelihood == lh && r.impact == imp && r.status !== 'Closed');
+    if (!match.length) {
+      list.innerHTML = '<p class="muted small">No risks at this cell.</p>';
+      return;
+    }
+    list.innerHTML = match.slice(0,8).map(r =>
+      `<div style="padding:4px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <a href="/risk-register" style="font-weight:600;color:var(--blue)">${esc(r.risk_id)}</a>
+        ${esc(r.title.slice(0,60))}
+       </div>`
+    ).join('');
+  } catch(e) {
+    list.innerHTML = `<p class="muted small" style="color:var(--red)">${esc(e.message)}</p>`;
+  }
+}
+
+/* ── activity feed ─────────────────────────────────────────────────────────── */
+function renderFeed(risks) {
+  const feed = document.getElementById('actFeed');
+  if (!risks.length) {
+    feed.innerHTML = '<li class="empty-msg">No recent activity yet.</li>';
+    return;
+  }
+  feed.innerHTML = risks.map(r => {
+    const lv  = scoreLevel(r.risk_score || 0);
+    const ago = timeAgo(r.created_date);
+    const src = sourceLabel(r.source);
+    return `<li class="activity-item">
+      <span class="act-dot ${lv}"></span>
+      <div style="flex:1;min-width:0">
+        <div class="act-title">${esc(r.risk_id)} — ${esc(r.title.slice(0,48))}${r.title.length>48?'…':''}</div>
+        <div class="act-meta">via ${src} · <span class="muted">${ago}</span></div>
+      </div>
+    </li>`;
+  }).join('');
+}
+
+/* ── alerts bar ────────────────────────────────────────────────────────────── */
+let _dismissedAlerts = new Set(
+  JSON.parse(sessionStorage.getItem('dismissedAlerts') || '[]')
+);
+
+function renderAlerts(alerts) {
+  const body    = document.getElementById('alertsBody');
+  const visible = alerts.filter(a => !_dismissedAlerts.has(alertKey(a)));
+
+  document.getElementById('alertCount').textContent =
+    visible.length ? `${visible.length} alert${visible.length!==1?'s':''}` : 'All clear';
+
+  if (!visible.length) {
+    body.innerHTML = `<div class="alert-item alert-ok">
+      <span>&#10003; No active alerts — risk posture within acceptable parameters.</span>
+    </div>`;
+    return;
+  }
+
+  body.innerHTML = visible.map((a, idx) => {
+    const key  = alertKey(a);
+    if (a.type === 'critical') {
+      return `<div class="alert-item alert-critical">
+        <span>&#128308; <strong>Critical Risk:</strong> ${esc(a.risk_id)} — ${esc(a.title)} (Score ${a.risk_score})</span>
+        <div style="display:flex;gap:8px">
+          <a href="/risk-register" class="btn-ghost btn-sm">View &rarr;</a>
+          <button class="btn-ghost btn-sm" onclick="dismissAlert('${key}')">Dismiss</button>
+        </div>
+      </div>`;
+    } else if (a.type === 'kri') {
+      return `<div class="alert-item alert-kri">
+        <span>&#128308; <strong>KRI Breach:</strong> ${esc(a.risk_id)} — ${esc(a.title)} | KRI: ${esc(a.kri)}</span>
+        <div style="display:flex;gap:8px">
+          <a href="/risk-register" class="btn-ghost btn-sm">View &rarr;</a>
+          <button class="btn-ghost btn-sm" onclick="dismissAlert('${key}')">Dismiss</button>
+        </div>
+      </div>`;
+    } else if (a.type === 'news') {
+      return `<div class="alert-item alert-news">
+        <span>&#128993; <strong>High-relevance news:</strong> ${esc(a.headline)} — Score ${a.relevance_score}</span>
+        <div style="display:flex;gap:8px">
+          <a href="/news" class="btn-ghost btn-sm">View &rarr;</a>
+          <button class="btn-ghost btn-sm" onclick="dismissAlert('${key}')">Dismiss</button>
+        </div>
+      </div>`;
+    }
+    return '';
+  }).join('');
+}
+
+function alertKey(a) {
+  return a.type === 'news' ? `news-${a.headline?.slice(0,20)}` : `${a.type}-${a.risk_id}`;
+}
+
+function dismissAlert(key) {
+  _dismissedAlerts.add(key);
+  sessionStorage.setItem('dismissedAlerts', JSON.stringify([..._dismissedAlerts]));
+  loadDashboard();
+}
+
 loadDashboard();
 </script>
 {% endblock %}

@@ -4,7 +4,7 @@
 {% block page_sub %}AI-generated Audit &amp; Risk Committee packs for DCT senior leadership{% endblock %}
 
 {% block top_actions %}
-  <button class="btn-primary" onclick="document.getElementById('generateModal').classList.add('open')">&#128203; Generate New Pack</button>
+  <button class="btn-primary" onclick="openGenerateModal()">&#128203; Generate New Pack</button>
 {% endblock %}
 
 {% block content %}
@@ -65,6 +65,14 @@
       <div id="genPackSpinner" style="display:none" class="spinner-row">
         <div class="spinner"></div>
         <span>Claude is drafting your ARC pack…</span>
+      </div>
+      <div id="genPackError" style="display:none;align-items:flex-start;gap:12px;padding:12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;margin-top:12px">
+        <span style="font-size:18px">&#9888;</span>
+        <div style="flex:1">
+          <div style="font-weight:600;color:#991b1b;margin-bottom:2px">Generation failed</div>
+          <div style="font-size:12px;color:#7f1d1d" id="genPackErrorMsg"></div>
+        </div>
+        <button class="btn-ghost btn-sm" onclick="generatePack()" style="white-space:nowrap">&#8635; Retry</button>
       </div>
     </div>
     <div class="modal-foot">
@@ -128,7 +136,9 @@ async function generatePack() {
     loadPacks();
     viewPack(data.id);
   } catch(e) {
-    showToast(e.message, 'error');
+    const errDiv = document.getElementById('genPackError');
+    errDiv.style.display = 'flex';
+    document.getElementById('genPackErrorMsg').textContent = e.message;
   } finally {
     document.getElementById('genPackSpinner').style.display = 'none';
     document.getElementById('genPackBtn').disabled = false;
@@ -150,6 +160,11 @@ async function viewPack(id) {
 
 function printPack() {
   document.getElementById('packFrame').contentWindow.print();
+}
+
+function openGenerateModal() {
+  document.getElementById('genPackError').style.display = 'none';
+  document.getElementById('generateModal').classList.add('open');
 }
 
 loadPacks();
