@@ -9,17 +9,15 @@ from datetime import datetime, timedelta
 from config import DB_PATH
 
 
+def _risk_id_exists(cursor, risk_id):
+    return cursor.execute("SELECT 1 FROM risks WHERE risk_id=?", (risk_id,)).fetchone() is not None
+
+
 def seed_demo_data():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
-    # Guard: only seed if risks table is empty
-    c.execute("SELECT COUNT(*) FROM risks")
-    if c.fetchone()[0] > 0:
-        conn.close()
-        return
-
-    print(">> Seeding demo data…")
+    print(">> Checking demo data…")
     now = datetime.now()
 
     def dt(days_ago=0):
@@ -201,10 +199,13 @@ def seed_demo_data():
          "Talent scheduling reviewed; 3 confirmed commitments renegotiated successfully.", 2, 3, 6, "Accepted", dt(2)),
     ]
 
-    # Insert all risks
+    # Insert risks only if their risk_id does not already exist
+    inserted = 0
     for risks_list in [enterprise, affiliate, department, event]:
         for r in risks_list:
             rid, level, entity, cat, title, desc, mit, lh, imp, score, status, created = r
+            if _risk_id_exists(c, rid):
+                continue
             c.execute("""
                 INSERT INTO risks
                   (risk_id, level, entity_name, category, title, description,
@@ -214,6 +215,9 @@ def seed_demo_data():
             """, (rid, level, entity, cat, title, desc, mit, lh, imp, score,
                   status, "Demo", "Risk Management Office", created, created,
                   "Short-term"))
+            inserted += 1
+    if inserted:
+        print(f">> Seeded {inserted} demo risks")
 
     # ── 3 Ingested Documents ──────────────────────────────────────────────────
     import os
@@ -233,11 +237,15 @@ def seed_demo_data():
         if not os.path.exists(fpath):
             with open(fpath, "w") as f:
                 f.write(f"# {fname}\n\nDemo seed file for DCT Risk Intelligence Platform.\n{summary}\n")
-        c.execute("""
-            INSERT INTO ingested_documents
-              (filename, doc_type, upload_date, processed, extracted_risks_count, summary)
-            VALUES (?,?,datetime('now'),1,?,?)
-        """, (fname, dtype, risk_count, summary))
+        exists = c.execute(
+            "SELECT 1 FROM ingested_documents WHERE filename=?", (fname,)
+        ).fetchone()
+        if not exists:
+            c.execute("""
+                INSERT INTO ingested_documents
+                  (filename, doc_type, upload_date, processed, extracted_risks_count, summary)
+                VALUES (?,?,datetime('now'),1,?,?)
+            """, (fname, dtype, risk_count, summary))
 
     # ── 8 News Items ──────────────────────────────────────────────────────────
     news = [
@@ -312,15 +320,19 @@ def seed_demo_data():
              "level": "enterprise", "score": 15, "level_label": "High", "status": "Open", "owner": "Risk Management Office"},
         ],
     }
-    c.execute("""
-        INSERT INTO arc_packs (title, period, generated_date, generated_by, status, content_json)
-        VALUES (?,?,?,?,?,?)
-    """, (
-        "DCT ARC Pack – Q4 2025", "Q4 2025",
-        (now - timedelta(days=14)).isoformat(),
-        "Risk Management Office", "Approved",
-        json.dumps(arc_content)
-    ))
+    arc_exists = c.execute(
+        "SELECT 1 FROM arc_packs WHERE period='Q4 2025'"
+    ).fetchone()
+    if not arc_exists:
+        c.execute("""
+            INSERT INTO arc_packs (title, period, generated_date, generated_by, status, content_json)
+            VALUES (?,?,?,?,?,?)
+        """, (
+            "DCT ARC Pack – Q4 2025", "Q4 2025",
+            (now - timedelta(days=14)).isoformat(),
+            "Risk Management Office", "Approved",
+            json.dumps(arc_content)
+        ))
 
     conn.commit()
     conn.close()

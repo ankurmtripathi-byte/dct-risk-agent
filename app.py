@@ -197,10 +197,14 @@ def add_ingested_risk():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # Auto-generate risk ID
-    cursor.execute("SELECT COUNT(*) FROM risks WHERE source='Ingested'")
-    count = cursor.fetchone()[0] + 1
-    risk_id = f"ING-{str(count).zfill(3)}"
+    # Auto-generate risk ID using max existing suffix to avoid collisions on deletion
+    cursor.execute("""
+        SELECT MAX(CAST(SUBSTR(risk_id, 5) AS INTEGER))
+        FROM risks WHERE risk_id LIKE 'ING-%'
+    """)
+    row = cursor.fetchone()
+    next_num = (row[0] or 0) + 1
+    risk_id = f"ING-{str(next_num).zfill(3)}"
 
     cursor.execute("""
         INSERT INTO risks (risk_id, level, entity_name, category, title, description,

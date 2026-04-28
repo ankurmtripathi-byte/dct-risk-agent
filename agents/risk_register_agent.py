@@ -9,6 +9,8 @@ import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment
 from flask import Blueprint, jsonify, render_template, request, send_file
 
+from utils import extract_json as _extract_json
+
 from config import ANTHROPIC_API_KEY, MODEL_ANALYSIS, MODEL_FAST
 from database import get_db
 
@@ -42,14 +44,12 @@ def _risk_row(row) -> dict:
 
 
 def _strip_fences(text: str) -> str:
-    """Remove markdown code fences from a string."""
-    t = text.strip()
-    if t.startswith("```"):
-        lines = t.split("\n")
-        t = "\n".join(lines[1:])
-        if t.rstrip().endswith("```"):
-            t = t[:t.rstrip().rfind("```")]
-    return t.strip()
+    from utils import extract_json as _ej
+    import json as _json
+    try:
+        return _json.dumps(_ej(text))
+    except Exception:
+        return text.strip()
 
 
 # ── Core Intelligence Functions ───────────────────────────────────────────────
@@ -152,12 +152,7 @@ The ai_correlation field MUST reference specific numbers from the event context.
 No preamble. No explanation. JSON array only."""
             }]
         )
-        text = response.content[0].text.strip()
-        if text.startswith('```'):
-            text = text.split('```')[1]
-            if text.startswith('json'):
-                text = text[4:]
-        return json.loads(text.strip())
+        return _extract_json(response.content[0].text)
 
     # ── CALLS 2-4: 5 risks each across 3 batches ─────────────────────────────
     # ── CALLS 2-4: 5 risks each across 3 batches ─────────────────────────────

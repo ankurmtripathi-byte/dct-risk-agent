@@ -11,6 +11,7 @@ from flask import Blueprint, jsonify, render_template, request
 import config
 from config import ANTHROPIC_API_KEY, DB_PATH, MODEL_ANALYSIS, UPLOAD_FOLDER
 from database import get_db
+from utils import extract_json as _extract_json
 
 client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
 
@@ -165,13 +166,7 @@ Return JSON in this exact format:
             max_tokens=4000,
             messages=[{"role": "user", "content": prompt}],
         )
-        raw = msg.content[0].text.strip()
-        # strip markdown fences if present
-        if raw.startswith("```"):
-            raw = "\n".join(raw.split("\n")[1:])
-            if raw.endswith("```"):
-                raw = raw[: raw.rfind("```")]
-        result = json.loads(raw)
+        result = _extract_json(msg.content[0].text)
 
         summary  = result.get("summary", "")
         risks_ai = result.get("risks", [])
@@ -301,11 +296,7 @@ Return exactly:
   "summary": "One sentence describing the document",
   "language": "EN|AR|mixed"}}"""}]
         )
-        text = response.content[0].text.strip()
-        if text.startswith('```'):
-            text = text.split('```')[1]
-            if text.startswith('json'): text = text[4:]
-        return json.loads(text.strip())
+        return _extract_json(response.content[0].text)
     except:
         return {"doc_type": "other", "confidence": 0,
                 "summary": "Could not classify", "language": "EN"}
@@ -345,11 +336,7 @@ Return empty array [] if no risks found. JSON only."""
                 max_tokens=2500,
                 messages=[{"role": "user", "content": prompt}]
             )
-            raw = resp.content[0].text.strip()
-            if raw.startswith('```'):
-                raw = raw.split('```')[1]
-                if raw.startswith('json'): raw = raw[4:]
-            result["risks"] = json.loads(raw.strip())
+            result["risks"] = _extract_json(resp.content[0].text)
             result["raw_count"] = len(result["risks"])
         except Exception as e:
             result["risks"] = []
@@ -380,11 +367,7 @@ JSON only."""
                 max_tokens=2000,
                 messages=[{"role": "user", "content": prompt}]
             )
-            raw = resp.content[0].text.strip()
-            if raw.startswith('```'):
-                raw = raw.split('```')[1]
-                if raw.startswith('json'): raw = raw[4:]
-            result["lessons"] = json.loads(raw.strip())
+            result["lessons"] = _extract_json(resp.content[0].text)
             result["raw_count"] = len(result["lessons"])
         except:
             result["lessons"] = []
@@ -411,11 +394,7 @@ JSON only."""
                 max_tokens=1000,
                 messages=[{"role": "user", "content": prompt}]
             )
-            raw = resp.content[0].text.strip()
-            if raw.startswith('```'):
-                raw = raw.split('```')[1]
-                if raw.startswith('json'): raw = raw[4:]
-            result["policies"] = [json.loads(raw.strip())]
+            result["policies"] = [_extract_json(resp.content[0].text)]
             result["raw_count"] = 1
         except:
             result["policies"] = []
@@ -476,11 +455,7 @@ duplicate_indices: items that are essentially the same as existing
 update_indices: items that exist but have new/different information
 Use the array index position from the EXTRACTED list."""}]
         )
-        raw = resp.content[0].text.strip()
-        if raw.startswith('```'):
-            raw = raw.split('```')[1]
-            if raw.startswith('json'): raw = raw[4:]
-        mapping = json.loads(raw.strip())
+        mapping = _extract_json(resp.content[0].text)
 
         result["new"] = [extracted_items[i] for i in mapping.get("new_indices", []) if i < len(extracted_items)]
         result["duplicates"] = [extracted_items[i] for i in mapping.get("duplicate_indices", []) if i < len(extracted_items)]
@@ -517,21 +492,29 @@ def process_document_pipeline(filepath, db_connection):
     items_to_reconcile = structured["risks"] or structured["lessons"]
     reconciliation = reconcile_with_existing(items_to_reconcile, db_connection)
 
-    # Step 5: Save document record to DB
+    # Step 5: Upsert document record — update if filename exists, else insert
     cursor = db_connection.cursor()
-    cursor.execute("""
-        INSERT OR REPLACE INTO ingested_documents
-        (filename, doc_type, upload_date, processed,
-         extracted_risks_count, extracted_text, summary)
-        VALUES (?, ?, datetime('now'), 1, ?, ?, ?)
-    """, (
-        filename,
-        doc_type,
-        structured["raw_count"],
-        extracted["text"][:5000],
-        classification["summary"]
-    ))
-    doc_id = cursor.lastrowid
+    existing = cursor.execute(
+        "SELECT id FROM ingested_documents WHERE filename=?", (filename,)
+    ).fetchone()
+    if existing:
+        cursor.execute("""
+            UPDATE ingested_documents
+            SET doc_type=?, upload_date=datetime('now'), processed=1,
+                extracted_risks_count=?, extracted_text=?, summary=?
+            WHERE filename=?
+        """, (doc_type, structured["raw_count"],
+              extracted["text"][:5000], classification["summary"], filename))
+        doc_id = existing[0]
+    else:
+        cursor.execute("""
+            INSERT INTO ingested_documents
+            (filename, doc_type, upload_date, processed,
+             extracted_risks_count, extracted_text, summary)
+            VALUES (?, ?, datetime('now'), 1, ?, ?, ?)
+        """, (filename, doc_type, structured["raw_count"],
+              extracted["text"][:5000], classification["summary"]))
+        doc_id = cursor.lastrowid
     db_connection.commit()
 
     return {

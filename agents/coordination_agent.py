@@ -4,6 +4,8 @@ from datetime import datetime
 import anthropic
 from flask import Blueprint, jsonify, render_template, request
 
+from utils import extract_json as _extract_json
+
 import config
 from config import ANTHROPIC_API_KEY, MODEL_FAST
 from database import get_db
@@ -303,12 +305,7 @@ Return ONLY valid JSON:
 
 Include ALL agencies in the response, even with empty arrays if no risks apply. JSON only."""}]
         )
-        raw = resp.content[0].text.strip()
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        return json.loads(raw.strip())
+        return _extract_json(resp.content[0].text)
 
     except Exception as e:
         print(f">> identify_shared_risks error: {e}")

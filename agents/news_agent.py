@@ -9,6 +9,7 @@ from flask import Blueprint, jsonify, render_template, request
 import config
 from config import ANTHROPIC_API_KEY, MODEL_FAST, NEWSAPI_KEY
 from database import get_db
+from utils import extract_json as _extract_json
 
 client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
 
@@ -206,12 +207,7 @@ Operational, Compliance, Environmental, Strategic, Crowd Management"""
             max_tokens=512,
             messages=[{"role": "user", "content": prompt}],
         )
-        raw = msg.content[0].text.strip()
-        if raw.startswith("```"):
-            raw = "\n".join(raw.split("\n")[1:])
-            if raw.endswith("```"):
-                raw = raw[: raw.rfind("```")]
-        result = json.loads(raw)
+        result = _extract_json(msg.content[0].text)
 
         score    = int(result.get("relevance_score", 5))
         cats     = result.get("mapped_risk_categories", [])
@@ -470,12 +466,7 @@ Monitor: Background awareness, no immediate action needed
 JSON array only. No explanation."""}]
         )
 
-        raw = resp.content[0].text.strip()
-        if raw.startswith('```'):
-            raw = raw.split('```')[1]
-            if raw.startswith('json'):
-                raw = raw[4:]
-        scores = json.loads(raw.strip())
+        scores = _extract_json(resp.content[0].text)
 
         # Merge scores back into news items
         scored_items = []
@@ -550,12 +541,7 @@ new_triggered: genuinely new risks not in the register. Only include if truly no
 Keep lists concise — max 3 per category."""}]
         )
 
-        raw = resp.content[0].text.strip()
-        if raw.startswith('```'):
-            raw = raw.split('```')[1]
-            if raw.startswith('json'):
-                raw = raw[4:]
-        result = json.loads(raw.strip())
+        result = _extract_json(resp.content[0].text)
         result.setdefault("amplified", [])
         result.setdefault("new_triggered", [])
         result["resolved"] = []
@@ -635,12 +621,7 @@ Return ONLY valid JSON:
 Keep recommended_actions to 3–5 concrete, DCT-specific actions. top_risks max 4 items. watch_list max 3 items."""}]
         )
 
-        raw = resp.content[0].text.strip()
-        if raw.startswith('```'):
-            raw = raw.split('```')[1]
-            if raw.startswith('json'):
-                raw = raw[4:]
-        result = json.loads(raw.strip())
+        result = _extract_json(resp.content[0].text)
         # Normalise threat level to lowercase
         result['overall_threat_level'] = result.get('overall_threat_level', suggested_level).lower()
         return result
