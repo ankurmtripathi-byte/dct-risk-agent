@@ -1,0 +1,4 @@
+# ADFF_2025_Risk_Register.txt
+
+Demo seed file for DCT Risk Intelligence Platform.
+Abu Dhabi Film Festival 2025 risk register with 10 identified risks across safety, operational and financial categories.

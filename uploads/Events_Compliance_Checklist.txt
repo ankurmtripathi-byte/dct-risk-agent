@@ -1,0 +1,4 @@
+# Events_Compliance_Checklist.txt
+
+Demo seed file for DCT Risk Intelligence Platform.
+Municipal compliance checklist for large events in Abu Dhabi including permit requirements, safety standards and insurance thresholds.

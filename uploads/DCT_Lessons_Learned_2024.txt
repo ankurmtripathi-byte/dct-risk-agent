@@ -1,0 +1,4 @@
+# DCT_Lessons_Learned_2024.txt
+
+Demo seed file for DCT Risk Intelligence Platform.
+Post-event lessons learned from 2024 DCT events programme covering crowd management, logistics and stakeholder coordination.

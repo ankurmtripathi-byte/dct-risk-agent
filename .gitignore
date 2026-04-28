@@ -10,4 +10,4 @@ dist/
 build/
 .DS_Store
 *.log
-dct_risk.db
+*.db
